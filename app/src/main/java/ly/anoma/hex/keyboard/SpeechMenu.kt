@@ -45,7 +45,14 @@ internal class SpeechMenu(context: Context, private val ime: HexKeyboard,
             Page.Home -> {
                 row(s(R.string.keyboard_menu_style), more(s(prefs.style.label))) { show(Page.Style) }
                 val currentLangLabel = prefs.language?.label
-                    ?: ime.feedback.activeLanguage?.let { FutoLanguages.find(context, it)?.nativeName }
+                    ?: ime.feedback.activeLanguage?.let { raw ->
+                        val (tag, lid) = ly.anoma.hex.typing.TypingPreferences.parseEntry(raw)
+                        val lang = FutoLanguages.find(context, tag)
+                        if (lang != null) {
+                            val lay = lid ?: lang.defaultLayout
+                            "${lang.nativeName} (${FutoLayouts.nameOf(context, lay)})"
+                        } else null
+                    }
                     ?: s(R.string.keyboard_menu_automatic)
                 row(s(R.string.keyboard_menu_language), more(currentLangLabel)) { show(Page.Language) }
                 if (prefs.translation && prefs.spokenCode == "es")
@@ -70,19 +77,25 @@ internal class SpeechMenu(context: Context, private val ime: HexKeyboard,
                 prefs.style = value; home()
             } }
             Page.Language -> {
-                val activeTag = ime.feedback.activeLanguage
-                val enabled = ime.feedback.enabledLanguages.mapNotNull { FutoLanguages.find(context, it) }
-                val autoChosen = prefs.language == null && activeTag == null
+                val activeEntry = ime.feedback.activeLanguage
+                val enabledEntries = ime.feedback.enabledLanguages.mapNotNull { raw ->
+                    val (tag, lid) = ly.anoma.hex.typing.TypingPreferences.parseEntry(raw)
+                    val lang = FutoLanguages.find(context, tag) ?: return@mapNotNull null
+                    val resolvedLid = lid ?: lang.defaultLayout
+                    val normalizedEntry = ly.anoma.hex.typing.TypingPreferences.formatEntry(lang.localeTag, resolvedLid)
+                    Triple(normalizedEntry, lang, FutoLayouts.nameOf(context, resolvedLid))
+                }
+                val autoChosen = prefs.language == null && activeEntry == null
                 row(s(R.string.keyboard_menu_automatic), if (autoChosen) chosen else "") {
                     prefs.language = null; ime.feedback.activeLanguage = null; ime.nextEnglish = null; close()
                 }
-                enabled.forEach { lang ->
-                    val isSelected = prefs.language == null && activeTag == lang.localeTag
-                    row(lang.nativeName, if (isSelected) chosen else "") {
-                        prefs.language = null; ime.feedback.activeLanguage = lang.localeTag; ime.nextEnglish = null; close()
+                enabledEntries.forEach { (entry, lang, layoutName) ->
+                    val isSelected = prefs.language == null && (activeEntry == entry || activeEntry == lang.localeTag)
+                    row("${lang.nativeName} ($layoutName)", if (isSelected) chosen else "") {
+                        prefs.language = null; ime.feedback.activeLanguage = entry; ime.nextEnglish = null; close()
                     }
                 }
-                val coveredCodes = enabled.map { it.whisperCode }.toSet()
+                val coveredCodes = enabledEntries.map { it.second.whisperCode }.toSet()
                 DictationLanguage.entries.filter { it.code !in coveredCodes }.forEach { value ->
                     row(value.label, if (prefs.language == value) chosen else "") {
                         prefs.language = value; ime.nextEnglish = null; close()

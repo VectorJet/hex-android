@@ -34,6 +34,7 @@ import ly.anoma.hex.typing.KeyPoint
 import ly.anoma.hex.typing.KeyRect
 import ly.anoma.hex.typing.TypingWord
 import ly.anoma.hex.useInter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** The keys: three rows from the page's layout, then ?123, comma, space, period and enter. Every
@@ -64,8 +65,17 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val gap = KeyboardMetrics.GAP * density
     /** The menu's height is the keys' height for the page, the number row included, so opening it
      * never resizes the keyboard. */
-    val menuHeight get() = rowHeight * (KeyboardMetrics.MENU_ROWS + if (current?.digits != null) 1 else 0) +
-        bottomExtra + reach
+    val menuHeight: Int get() {
+        val custom = current?.takeIf { !it.symbols && it.pad == null }?.futoLayout
+        val totalRows = if (custom != null) {
+            val nonBottom = custom.rows.count { it.type != "bottom" }
+            val extraDigits = if (!custom.hasExplicitNumberRow && current?.digits != null) 1 else 0
+            maxOf(KeyboardMetrics.MENU_ROWS, nonBottom + extraDigits + 1)
+        } else {
+            KeyboardMetrics.MENU_ROWS + if (current?.digits != null) 1 else 0
+        }
+        return rowHeight * totalRows + bottomExtra + reach
+    }
     private val letters = LinkedHashMap<Char, KeyCap>()
     private var grid: KeyGrid? = null
     private var pendingAccents: Runnable? = null
@@ -102,6 +112,9 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     // stays mounted and its own finger-up ends a chord.
     private var current: KeyboardPage? = null
     private val caseKeys = ArrayList<Pair<Char, KeyCap>>()
+    private val customCaseKeys = ArrayList<Pair<FutoKeySpec, KeyCap>>()
+    private var customSpaceLabel: TextView? = null
+    private var activeLocale: Locale = Locale.ROOT
     private var shiftIcon: ImageView? = null
     // The Labs letter-symbol setting the keys were drawn with, so a change draws them when next shown.
     private var letterSymbolsDrawn = false
@@ -244,9 +257,14 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         // Another kind of field in the same box (the app changed its type): the keys, not the emoji panel over them.
         if (emojiOpen) host.closeEmoji()
         current = page; letterSymbolsDrawn = letterSymbols
-        clearCallout(); endSlide(); cancelSwipe(); grid = null; letters.clear(); caseKeys.clear(); slides.clear(); shiftIcon = null
+        clearCallout(); endSlide(); cancelSwipe(); grid = null; letters.clear(); caseKeys.clear(); customCaseKeys.clear(); customSpaceLabel = null; slides.clear(); shiftIcon = null
+        activeLocale = page.futoLocale?.let { Locale.forLanguageTag(it.replace('_', '-')) } ?: Locale.ROOT
         rows.removeAllViews()
         page.pad?.let { showPad(page, it); return }
+        if (!page.symbols && page.futoLayout != null) {
+            showFutoLayout(page, page.futoLayout)
+            return
+        }
         bottom.visibility = VISIBLE
         val language = page.language
         val symbols = page.symbols
@@ -362,6 +380,363 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             typesOnLift(k, preview = { text }, holds = { listOf(holds()) },
                 type = { option -> if (option != null && option != text) ime.engine.type(option) else k.performClick() })
         }
+    }
+
+    /** Renders a compiled FUTO Keyboard layout (letters, optional custom number row, and optional custom bottom row). */
+    private fun showFutoLayout(page: KeyboardPage, layout: FutoLayoutDef) {
+        val letterHolds = ime.feedback.letterSymbols
+        val langCode = page.futoLocale?.replace('-', '_')?.substringBefore('_')?.lowercase(Locale.ROOT)
+            ?: page.language.layoutCode
+        val numRows = layout.rows.filter { it.type == "numbers" }
+        val letterRows = layout.rows.filter { it.type == "letters" }
+        val bottomRows = layout.rows.filter { it.type == "bottom" }
+        val hasInlineControls = letterRows.any { r -> r.keys.any { it.kind == "shift" || it.kind == "delete" } }
+
+        val maxCols = maxOf(
+            10f,
+            (numRows + letterRows).maxOfOrNull { r ->
+                r.keys.sumOf { k ->
+                    when (k.kind) {
+                        "shift", "delete", "symbols" -> 1.5
+                        "gap" -> 0.5
+                        else -> 1.0
+                    }
+                }.toFloat()
+            } ?: 10f
+        )
+
+        if (numRows.isEmpty()) {
+            page.digits?.let { addDigitRow(it, maxCols) }
+        }
+
+        for ((nIdx, nRow) in numRows.withIndex()) {
+            val top = if (nIdx == 0) reach else 0
+            val cols = nRow.keys.size.toFloat().coerceAtLeast(1f)
+            val row = KeyRowLayout(context, cols, side, gap, insetTop + top, insetBottom)
+            rows.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, rowHeight + top))
+            var at = 0f
+            for (spec in nRow.keys) {
+                val cap = buildFutoCharKey(spec, langCode, digitHint = null, letterHolds = false, row = row, modifierBg = false)
+                row.add(cap, at, 1f)
+                at += 1f
+            }
+        }
+
+        val hasTopDigits = numRows.isNotEmpty() || page.digits != null
+        for ((index, lRow) in letterRows.withIndex()) {
+            val top = if (index == 0 && !hasTopDigits) reach else 0
+            val isLastLetterRow = index == letterRows.lastIndex
+            val needsImplicitShiftDelete = isLastLetterRow && !hasInlineControls
+
+            val rowKeyUnits = lRow.keys.sumOf { k ->
+                when (k.kind) {
+                    "shift", "delete", "symbols" -> 1.5
+                    "gap" -> 0.5
+                    else -> 1.0
+                }
+            }.toFloat()
+
+            val cols = if (needsImplicitShiftDelete) maxCols else maxOf(maxCols, rowKeyUnits)
+            val implicitSide = if (needsImplicitShiftDelete) {
+                maxOf(1.5f, (cols - rowKeyUnits) / 2f)
+            } else 0f
+
+            val row = KeyRowLayout(context, cols, side, gap, insetTop + top, insetBottom)
+            rows.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, rowHeight + top))
+
+            var at = when {
+                needsImplicitShiftDelete -> 0f
+                cols > rowKeyUnits -> (cols - rowKeyUnits) / 2f
+                else -> 0f
+            }
+
+            if (needsImplicitShiftDelete) {
+                val shiftKey = makeShiftCap(page)
+                row.add(shiftKey, 0f, implicitSide)
+                at = implicitSide
+            }
+
+            val letterCount = lRow.keys.count { it.kind == "key" }.coerceAtLeast(1)
+            val keyWidth = if (needsImplicitShiftDelete) {
+                (cols - 2f * implicitSide) / letterCount
+            } else 1f
+
+            var charPosition = 0
+            for (spec in lRow.keys) {
+                when (spec.kind) {
+                    "shift" -> {
+                        val w = 1.5f
+                        row.add(makeShiftCap(page), at, w)
+                        at += w
+                    }
+                    "delete" -> {
+                        val w = 1.5f
+                        deleteKey = newDeleteKey().also { row.add(it, at, w) }
+                        at += w
+                    }
+                    "symbols" -> {
+                        val w = 1.5f
+                        val sym = caps.cap(
+                            context.getString(R.string.keyboard_numbers_label),
+                            context.getString(R.string.keyboard_numbers),
+                            modifier, 15f, ime.engine::mode
+                        ).also { it.textEntry = false }
+                        row.add(sym, at, w)
+                        at += w
+                    }
+                    "gap" -> {
+                        at += 0.5f
+                    }
+                    "key" -> {
+                        val digit = if (!hasTopDigits && index == 0 && charPosition < 10) {
+                            KeyboardLetters.DIGITS[charPosition]
+                        } else null
+                        val cap = buildFutoCharKey(spec, langCode, digit, letterHolds, row, modifierBg = false)
+                        row.add(cap, at, keyWidth)
+                        at += keyWidth
+                        charPosition++
+                    }
+                }
+            }
+
+            if (needsImplicitShiftDelete) {
+                deleteKey = newDeleteKey().also { row.add(it, cols - implicitSide, implicitSide) }
+            }
+        }
+
+        if (bottomRows.isEmpty()) {
+            bottom.visibility = VISIBLE
+            (emojiKey.face.getChildAt(0)).visibility = VISIBLE
+            (emojiKey.face.getChildAt(1)).visibility = GONE
+            emojiKey.contentDescription = context.getString(R.string.keyboard_emoji)
+            modeKey.label?.text = context.getString(R.string.keyboard_numbers_label)
+            modeKey.contentDescription = context.getString(R.string.keyboard_numbers)
+            commaText = page.kind.mark
+            comma.label?.text = commaText
+            comma.label?.textSize = if (commaText == "@") 21f else 26f
+            comma.contentDescription = context.getString(when (commaText) { "@" -> R.string.keyboard_at; "/" -> R.string.keyboard_slash; else -> R.string.keyboard_comma })
+            val label = page.enter.label
+            enterKey.label?.text = label.orEmpty()
+            enterIcon.setImageResource(actionIcon(page.enter.action))
+            enterIcon.visibility = if (label == null) View.VISIBLE else View.GONE
+            enterKey.contentDescription = label ?: actionLabel(page.enter.action) ?: context.getString(R.string.keyboard_return)
+        } else {
+            bottom.visibility = GONE
+            val bKeys = bottomRows.first().keys.filter { it.kind != "optionalzwnj" }
+            val fixedUnits = bKeys.sumOf { k ->
+                when (k.kind) {
+                    "symbols", "enter", "delete" -> 1.5
+                    "space" -> 0.0
+                    else -> 1.0
+                }
+            }.toFloat()
+            val spaceCount = bKeys.count { it.kind == "space" }.coerceAtLeast(1)
+            val totalCols = maxOf(10f, fixedUnits + 3.5f * spaceCount)
+            val spaceWidth = (totalCols - fixedUnits) / spaceCount
+
+            val bRow = KeyRowLayout(context, totalCols, side, gap, insetTop, insetBottom + bottomExtra)
+            rows.addView(bRow, LayoutParams(LayoutParams.MATCH_PARENT, rowHeight + bottomExtra))
+            var at = 0f
+            for (spec in bKeys) {
+                when (spec.kind) {
+                    "symbols" -> {
+                        val k = caps.cap(
+                            context.getString(R.string.keyboard_numbers_label),
+                            context.getString(R.string.keyboard_numbers),
+                            modifier, 17f, ime.engine::mode
+                        ).also { it.textEntry = false }
+                        bRow.add(k, at, 1.5f); at += 1.5f
+                    }
+                    "action" -> {
+                        val k = caps.icon(R.drawable.ic_emoji, context.getString(R.string.keyboard_emoji), caps.key) { host.openEmoji() }
+                        k.textEntry = false
+                        typesOnLift(k, preview = { null }, holds = { emptyList() }, type = { k.performClick() })
+                        bRow.add(k, at, 1f); at += 1f
+                    }
+                    "contextual" -> {
+                        val mark = page.kind.mark
+                        val k = caps.cap(mark, mark, modifier) { ime.engine.type(mark) }
+                        typesOnLift(k, preview = { null }, holds = { emptyList() }, type = { k.performClick() })
+                        bRow.add(k, at, 1f); at += 1f
+                    }
+                    "space" -> {
+                        val sp = makeCustomSpaceCap()
+                        bRow.add(sp, at, spaceWidth); at += spaceWidth
+                    }
+                    "delete" -> {
+                        deleteKey = newDeleteKey().also { bRow.add(it, at, 1.5f) }
+                        at += 1.5f
+                    }
+                    "enter" -> {
+                        val ent = caps.cap("", context.getString(R.string.keyboard_return), modifier, 17f, ime.engine::enter)
+                        ent.sound = AudioManager.FX_KEYPRESS_RETURN
+                        ent.textEntry = false
+                        typesOnLift(ent, preview = { null }, holds = { emptyList() }, type = { ent.performClick() })
+                        val lbl = page.enter.label
+                        if (lbl != null) {
+                            ent.label?.text = lbl
+                            ent.contentDescription = lbl
+                        } else {
+                            val ico = ImageView(context).apply {
+                                setImageResource(actionIcon(page.enter.action))
+                                imageTintList = ColorStateList.valueOf(ink)
+                            }
+                            ent.face.addView(ico, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+                            ent.contentDescription = actionLabel(page.enter.action) ?: context.getString(R.string.keyboard_return)
+                        }
+                        bRow.add(ent, at, 1.5f); at += 1.5f
+                    }
+                    "key" -> {
+                        val cap = buildFutoCharKey(spec, langCode, digitHint = null, letterHolds = false, row = bRow, modifierBg = false)
+                        bRow.add(cap, at, 1f); at += 1f
+                    }
+                }
+            }
+            refreshSpace()
+        }
+    }
+
+    private fun makeShiftCap(page: KeyboardPage): KeyCap =
+        caps.icon(shiftIconFor(page), shiftDescription(page), modifier, { ime.engine.shiftDown(); ime.engine.shiftUp() }).also { key ->
+            shiftIcon = key.face.getChildAt(0) as ImageView
+            key.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { roll.down(v); v.isPressed = true; endSlide(); ime.engine.shiftDown() }
+                    MotionEvent.ACTION_MOVE -> if (v.isPressed) slideOver(v, e)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        roll.up(v)
+                        val onto = slidOnto; endSlide()
+                        if (onto != null && e.actionMasked == MotionEvent.ACTION_UP) typeSlid(onto, e)
+                        if (v.isPressed) { v.isPressed = false; ime.engine.shiftUp() }
+                    }
+                }
+                true
+            }
+        }
+
+    private fun makeCustomSpaceCap(): KeyCap =
+        caps.cap("", context.getString(R.string.keyboard_space), caps.key, 14f) {
+            ime.engine.space(spacePoint, geometry()); spacePoint = null
+        }.also { sp ->
+            sp.sound = AudioManager.FX_KEYPRESS_SPACEBAR
+            sp.label?.setTextColor(quiet)
+            customSpaceLabel = sp.label
+            sp.setOnLongClickListener { host.openLanguageMenu(); true }
+            sp.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        roll.down(v) {
+                            removeCallbacks(switchLanguage); val typing = v.isPressed && cursorSlide == null
+                            v.isPressed = false; cursorSlide = null
+                            if (typing) v.performClick()
+                        }
+                        v.isPressed = true; cursorSlide = null; spaceGesture.down(e.x, e.y, e.eventTime)
+                        spacePoint = KeyPoint((v.left + e.x).toDouble(), (rows.height - rowHeight + e.y).toDouble())
+                        postDelayed(switchLanguage, ViewConfiguration.getLongPressTimeout().toLong())
+                    }
+                    MotionEvent.ACTION_MOVE -> if (v.isPressed) {
+                        val characters = spaceGesture.move(e.x, e.y, e.eventTime)
+                        if (!spaceGesture.still) removeCallbacks(switchLanguage)
+                        if (characters != null) (cursorSlide ?: ime.engine.cursorSlide().also { cursorSlide = it }).moveTo(characters)
+                    }
+                    MotionEvent.ACTION_UP -> if (roll.up(v)) {
+                        removeCallbacks(switchLanguage); val pressed = v.isPressed; v.isPressed = false
+                        if (pressed && spaceGesture.up()) v.performClick()
+                        if (pressed) sp.typedOnLift()
+                        cursorSlide = null
+                    }
+                    MotionEvent.ACTION_CANCEL -> { roll.up(v); removeCallbacks(switchLanguage); v.isPressed = false; cursorSlide = null }
+                }
+                true
+            }
+        }
+
+    private fun buildFutoCharKey(
+        spec: FutoKeySpec,
+        langCode: String,
+        digitHint: Char?,
+        letterHolds: Boolean,
+        row: KeyRowLayout,
+        modifierBg: Boolean
+    ): KeyCap {
+        val shifted = current?.shifted == true
+        val initialLabel = spec.displayLabel(shifted, activeLocale)
+        val singleChar = spec.output.singleOrNull()?.lowercaseChar()
+        val fontSize = when {
+            initialLabel.length >= 3 -> 16f
+            initialLabel.length == 2 -> 20f
+            else -> 25f
+        }
+        var touch: KeyPoint? = null
+        var downOutput: String? = null
+        val fill = if (modifierBg) modifier else caps.key
+        val k = caps.cap(initialLabel, initialLabel, fill, fontSize) {
+            val g = geometry()
+            val p = touch ?: singleChar?.let { g?.centres?.get(it) }
+            val rawOut = downOutput ?: spec.typedOutput(current?.shifted == true, activeLocale)
+            val finalOut = if (singleChar != null && touch != null && rawOut.length == 1 && rawOut[0].isLetter()) {
+                likelier(singleChar, rawOut, touch!!)
+            } else rawOut
+            if (g != null && p != null && finalOut.length == 1 && finalOut[0].isLetter()) {
+                ime.engine.letter(finalOut, p.x, p.y, g)
+            } else {
+                ime.engine.type(finalOut)
+            }
+        }
+        customCaseKeys.add(spec to k)
+        if (singleChar != null && !letters.containsKey(singleChar)) {
+            letters[singleChar] = k
+        }
+        val symbol = if (letterHolds && singleChar != null) LetterFeedback.letterSymbol(singleChar) else null
+        k.hint(spec.hint ?: digitHint?.toString() ?: symbol?.toString())
+
+        fun holds(): List<String> {
+            val isShifted = current?.shifted == true
+            val baseHolds = if (isShifted && spec.shiftedMoreKeys.isNotEmpty()) {
+                spec.shiftedMoreKeys
+            } else if (spec.moreKeys.isNotEmpty()) {
+                if (isShifted && spec.shiftable) spec.moreKeys.map { it.uppercase(activeLocale) } else spec.moreKeys
+            } else if (singleChar != null) {
+                val curChar = spec.displayLabel(isShifted, activeLocale).singleOrNull() ?: singleChar
+                LetterFeedback.options(curChar, langCode)
+            } else emptyList()
+
+            val prefix = digitHint?.toString() ?: (if (letterHolds && singleChar != null) LetterFeedback.letterSymbol(singleChar)?.toString() else null)
+            return if (prefix == null) baseHolds else (listOf(prefix) + baseHolds).distinct()
+        }
+
+        if (holds().isNotEmpty()) {
+            k.setOnLongClickListener { host.openAccents(holds(), it); true }
+            k.longClickLabel = context.getString(R.string.keyboard_more_characters)
+        }
+        slides[k] = { p ->
+            val g = geometry()
+            val out = spec.typedOutput(current?.shifted == true, activeLocale)
+            if (g != null && out.length == 1 && out[0].isLetter()) ime.engine.letter(out, p.x, p.y, g) else ime.engine.type(out)
+        }
+        typesOnLift(
+            k,
+            preview = { spec.displayLabel(current?.shifted == true, activeLocale) },
+            holds = { listOf(holds()) },
+            swipes = singleChar != null && singleChar.isLetter(),
+            down = { e ->
+                downOutput = spec.typedOutput(current?.shifted == true, activeLocale)
+                touch = KeyPoint((k.left + e.getX(e.actionIndex)).toDouble(), (row.top + e.getY(e.actionIndex)).toDouble())
+            },
+            type = { option ->
+                val text = downOutput ?: spec.typedOutput(current?.shifted == true, activeLocale)
+                if (option != null && option != text) {
+                    val g = geometry(); val p = touch
+                    if (g != null && p != null && option.length == 1 && option[0].isLetter()) {
+                        ime.engine.letter(option, p.x, p.y, g, explicit = true)
+                    } else {
+                        ime.engine.type(option)
+                    }
+                } else k.performClick()
+            },
+            done = { touch = null; downOutput = null }
+        )
+        return k
     }
 
     /** A pad in place of the letter rows and the bottom row (Gboard's for number, phone and date fields,
@@ -750,6 +1125,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     /** Shift changed and nothing else: new labels on the same keys. */
     private fun relabel(page: KeyboardPage) {
         for ((c, key) in caseKeys) { val text = cased(c); key.label?.text = text; key.contentDescription = text }
+        for ((spec, key) in customCaseKeys) {
+            val text = spec.displayLabel(page.shifted, activeLocale)
+            key.label?.text = text
+            key.contentDescription = text
+        }
         shiftIcon?.setImageResource(shiftIconFor(page))
         (shiftIcon?.parent?.parent as? View)?.contentDescription = shiftDescription(page)
     }
@@ -801,10 +1181,23 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     }
     private fun geometry(): KeyGrid? {
         grid?.let { return it }
-        // The pitch from the layout's own first two keys and the row under them: on AZERTY, q, w and a sit on
-        // other rows (160 x -155 px instead of 107 x 155). The apostrophe is no letter for the touch model.
-        val rows = KeyboardLetters.rows((current ?: return null).language.layoutCode)
-        val first = letters[rows[0][0]] ?: return null; val next = letters[rows[0][1]] ?: return null; val below = letters[rows[1][0]] ?: return null
+        val page = current ?: return null
+        val custom = page.futoLayout
+        val (first, next, below) = if (custom != null) {
+            val lRows = custom.rows.filter { it.type == "letters" }
+            val r0 = lRows.getOrNull(0)?.keys?.filter { it.kind == "key" && it.output.length == 1 }.orEmpty()
+            val r1 = lRows.getOrNull(1)?.keys?.filter { it.kind == "key" && it.output.length == 1 }.orEmpty()
+            val c0 = r0.getOrNull(0)?.output?.singleOrNull()?.lowercaseChar()?.let { letters[it] } ?: return null
+            val c1 = r0.getOrNull(1)?.output?.singleOrNull()?.lowercaseChar()?.let { letters[it] } ?: return null
+            val c2 = r1.getOrNull(0)?.output?.singleOrNull()?.lowercaseChar()?.let { letters[it] } ?: return null
+            Triple(c0, c1, c2)
+        } else {
+            val rows = KeyboardLetters.rows(page.language.layoutCode)
+            val c0 = letters[rows[0][0]] ?: return null
+            val c1 = letters[rows[0][1]] ?: return null
+            val c2 = letters[rows[1][0]] ?: return null
+            Triple(c0, c1, c2)
+        }
         if (first.width == 0 || next.left == first.left) return null
         val centres = letters.filterKeys { it.isLetter() }.mapValues { (_, cap) -> capCentre(cap) }
         return KeyGrid(centres, capCentre(next).x - capCentre(first).x, capCentre(below).y - capCentre(first).y, spaceRect()).also { grid = it }
@@ -821,8 +1214,12 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         spaceKey.contentDescription = context.getString(R.string.keyboard_space)
         spaceKey.longClickLabel = context.getString(R.string.keyboard_space_language_action,
             if (next.translate) context.getString(R.string.keyboard_space_translate, next.languageLabel) else next.languageLabel)
-        spaceKey.label?.text = if (next.translate) context.getString(R.string.keyboard_space_translate, next.languageLabel) else next.languageLabel
-        spaceKey.label?.textSize = if (next.translate) 12f else 14f
+        val text = if (next.translate) context.getString(R.string.keyboard_space_translate, next.languageLabel) else next.languageLabel
+        val size = if (next.translate) 12f else 14f
+        spaceKey.label?.text = text
+        spaceKey.label?.textSize = size
+        customSpaceLabel?.text = text
+        customSpaceLabel?.textSize = size
     }
     fun cancelGestures() {
         cancelSwipe()

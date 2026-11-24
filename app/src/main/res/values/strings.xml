@@ -63,6 +63,8 @@
     <!-- Settings -->
     <string name="settings_languages">Languages &amp; layouts</string>
     <string name="settings_add_language">Add language</string>
+    <string name="settings_pick_layout">Choose layout</string>
+    <string name="languages_choose_layout">Change layout</string>
     <string name="languages_active_section">Active language</string>
     <string name="languages_enabled_section">Added languages</string>
     <string name="languages_add_action">Add language</string>

@@ -6,6 +6,8 @@ import ly.anoma.hex.speech.Spoken
 
 internal class TypingPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("typing", Context.MODE_PRIVATE)
+
+    /** Enabled entries formatted as `"localeTag:layoutId"` (legacy bare `"localeTag"` is accepted). */
     var enabledLanguages: List<String>
         get() = prefs.getString(ENABLED_LANGUAGES, null)
             ?.split('\n')
@@ -15,43 +17,59 @@ internal class TypingPreferences(context: Context) {
         set(value) {
             prefs.edit().putString(ENABLED_LANGUAGES, value.distinct().joinToString("\n")).apply()
         }
-    /** Active FUTO locale tag (e.g. "en_US", "hi", "ja"), or null for Automatic. */
+
+    /** Active `"localeTag:layoutId"` entry, or null for Automatic. */
     var activeLanguage: String?
         get() = prefs.getString(ACTIVE_LANGUAGE, null)?.takeIf { it.isNotBlank() }
         set(value) {
-            val tag = value?.takeIf { it.isNotBlank() }
-            val editor = prefs.edit().putString(ACTIVE_LANGUAGE, tag)
-            if (tag != null) {
+            val raw = value?.takeIf { it.isNotBlank() }
+            val editor = prefs.edit().putString(ACTIVE_LANGUAGE, raw)
+            if (raw != null) {
+                val (localeTag, _) = parseEntry(raw)
                 val current = enabledLanguages
-                if (tag !in current) {
-                    editor.putString(ENABLED_LANGUAGES, (current + tag).joinToString("\n"))
+                if (raw !in current) {
+                    editor.putString(ENABLED_LANGUAGES, (current + raw).joinToString("\n"))
                 }
-                editor.putString("layout", Spoken.matching(tag)?.layoutCode)
+                editor.putString("layout", Spoken.matching(localeTag)?.layoutCode)
             } else {
                 editor.putString("layout", null)
             }
             editor.apply()
         }
-    fun addLanguage(localeTag: String) {
+
+    val activeLocaleTag: String?
+        get() = activeLanguage?.let { parseEntry(it).first }
+
+    val activeLayoutId: String?
+        get() = activeLanguage?.let { parseEntry(it).second }
+
+    fun addLanguageLayout(localeTag: String, layoutId: String) {
         val tag = localeTag.trim()
+        val layout = layoutId.trim()
         if (tag.isEmpty()) return
-        val current = enabledLanguages
-        if (tag !in current) {
-            enabledLanguages = current + tag
+        val entry = formatEntry(tag, layout)
+        val current = enabledLanguages.filterNot { it == tag }
+        if (entry !in current) {
+            enabledLanguages = current + entry
+        } else if (current != enabledLanguages) {
+            enabledLanguages = current
         }
     }
-    fun removeLanguage(localeTag: String) {
-        val updated = enabledLanguages.filter { it != localeTag }
+
+    fun removeLanguage(entry: String) {
+        val updated = enabledLanguages.filter { it != entry }
         enabledLanguages = updated
-        if (activeLanguage == localeTag) {
+        if (activeLanguage == entry) {
             activeLanguage = updated.firstOrNull()
         }
     }
+
     var layout: Spoken?
-        get() = Spoken.matching(activeLanguage ?: prefs.getString("layout", null))
+        get() = Spoken.matching(activeLocaleTag ?: prefs.getString("layout", null))
         set(value) {
             activeLanguage = value?.layoutCode
         }
+
     /** Settings › Keyboard › Auto-capitalisation: shift comes on where the field asks for a capital. On by default. */
     var autoCapitalize: Boolean
         get() = prefs.getBoolean("autoCapitalize", true)
@@ -103,6 +121,7 @@ internal class TypingPreferences(context: Context) {
         val key = pair(language, original, replacement)
         prefs.edit().putInt(key, (prefs.getInt(key, 0) + 1).coerceAtMost(2)).apply()
     }
+
     companion object {
         const val ENABLED_LANGUAGES = "enabledLanguages"
         const val ACTIVE_LANGUAGE = "activeLanguage"
@@ -110,5 +129,13 @@ internal class TypingPreferences(context: Context) {
         const val NUMBER_ROW = "numberRow"
         const val EMOJI_SUGGESTIONS = "emojiSuggestions"
         const val KEYBOARD_TOOLS = "keyboardTools"
+
+        fun formatEntry(localeTag: String, layoutId: String?): String =
+            if (layoutId.isNullOrBlank()) localeTag else "$localeTag:$layoutId"
+
+        fun parseEntry(raw: String): Pair<String, String?> {
+            val idx = raw.indexOf(':')
+            return if (idx < 0) raw to null else raw.substring(0, idx) to raw.substring(idx + 1).takeIf { it.isNotBlank() }
+        }
     }
 }

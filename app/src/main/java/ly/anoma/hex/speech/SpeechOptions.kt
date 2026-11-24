@@ -2,6 +2,7 @@ package ly.anoma.hex.speech
 
 import android.content.Context
 import android.content.res.Resources
+import ly.anoma.hex.typing.TypingPreferences
 
 internal enum class Style { Polished, Casual, Notes, Verbatim }
 /** A keyboard layout's language: its keys, accents and typing model. Dictation languages are
@@ -14,7 +15,8 @@ internal enum class Spoken(val code: String, val label: String) {
     val layoutCode get() = if (this == Norwegian) "nb" else code
     companion object {
         fun matching(code: String?): Spoken? {
-            val base = code?.replace('-', '_')?.substringBefore('_')?.lowercase()
+            val tag = code?.substringBefore(':')
+            val base = tag?.replace('-', '_')?.substringBefore('_')?.lowercase()
             return when (base) {
                 "no", "nb", "nn" -> Norwegian
                 else -> entries.firstOrNull { it.code == base }
@@ -37,7 +39,8 @@ internal enum class DictationLanguage(val code: String, val label: String, val l
 
     companion object {
         fun matching(code: String?): DictationLanguage? {
-            val base = code?.replace('-', '_')?.substringBefore('_')?.lowercase()
+            val tag = code?.substringBefore(':')
+            val base = tag?.replace('-', '_')?.substringBefore('_')?.lowercase()
             return when (base) {
                 "no", "nb", "nn" -> Norwegian
                 else -> entries.firstOrNull { it.code == base }
@@ -80,13 +83,17 @@ internal class SpeechPreferences(private val context: Context) {
         get() = DictationLanguage.matching(prefs.getString("spoken", null))
         set(value) { prefs.edit().putString("spoken", value?.code).apply() }
     private val typing = context.getSharedPreferences("typing", Context.MODE_PRIVATE)
+    private val activeLocaleTag: String?
+        get() = typing.getString(TypingPreferences.ACTIVE_LANGUAGE, null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { TypingPreferences.parseEntry(it).first }
     private val activeFutoLanguage: FutoLanguage?
-        get() = typing.getString("activeLanguage", null)?.let { FutoLanguages.find(context, it) }
+        get() = activeLocaleTag?.let { FutoLanguages.find(context, it) }
     val spoken: DictationLanguage
         get() = language ?: activeFutoLanguage?.let { DictationLanguage.matching(it.localeTag) }
             ?: Resources.getSystem().configuration.locales.let { locales ->
                 DictationLanguage.automatic(
-                    Spoken.matching(typing.getString("activeLanguage", null) ?: typing.getString("layout", null)),
+                    Spoken.matching(activeLocaleTag ?: typing.getString("layout", null)),
                     (0 until locales.size()).map { locales[it].language }
                 )
             }

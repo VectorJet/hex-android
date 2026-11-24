@@ -76,6 +76,8 @@ internal class KeyboardEngine(
     private val emoji: EmojiWords? = null,
     private val clock: () -> Long = { SystemClock.uptimeMillis() },
     private val main: Handler = Handler(Looper.getMainLooper()),
+    private val futoLayout: () -> FutoLayoutDef? = { null },
+    private val futoLocale: () -> String? = { null },
 ) {
     private companion object {
         /** The fix and the decoder's readings wait for this pause in typing: working them out costs a
@@ -211,6 +213,7 @@ internal class KeyboardEngine(
     private fun capsWanted(): Boolean {
         if (shift.locked) return true
         if (!feedback.autoCapitalize) return false
+        if (futoLayout()?.autoShift == false) return false
         val mask = (editor?.inputType ?: 0) and
             (InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_CAP_WORDS or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         return !secure && mask != 0 && target.capsMode(mask) != 0
@@ -222,7 +225,7 @@ internal class KeyboardEngine(
     }
     private fun showPlane() {
         surface?.showPage(KeyboardPage(layoutLanguage(), symbols, more, shift.uppercase, shift.locked, EnterKey.from(editor),
-            FieldKind.of(editor?.inputType ?: 0), pad, feedback.numberRow))
+            FieldKind.of(editor?.inputType ?: 0), pad, feedback.numberRow, futoLayout(), futoLocale()))
         // The strip's Emoji tool follows the page (Labs › Keyboard › Keyboard tools): the keys' emoji key is
         // on the letters only, never on a symbol page or a pad.
         val emoji = emojiAvailable

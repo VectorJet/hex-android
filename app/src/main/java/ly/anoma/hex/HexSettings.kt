@@ -42,12 +42,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ly.anoma.hex.feedback.Feedback
 import ly.anoma.hex.feedback.FeedbackForm
+import ly.anoma.hex.keyboard.FutoLayouts
 import ly.anoma.hex.speech.*
 import ly.anoma.hex.typing.TypingPreferences
 import ly.anoma.hex.updates.Updates
 
 private enum class Page(val title: Int) {
     Home(R.string.app_name), Languages(R.string.settings_languages), AddLanguage(R.string.settings_add_language),
+    PickLayout(R.string.settings_pick_layout),
     Dictation(R.string.settings_dictation), Keyboard(R.string.settings_keyboard), Privacy(R.string.settings_privacy),
     Labs(R.string.settings_labs),
     Language(R.string.settings_dictation_language), Layout(R.string.settings_keyboard_layout), Styles(R.string.settings_style),
@@ -55,6 +57,7 @@ private enum class Page(val title: Int) {
     Feedback(R.string.feedback_send_feedback);
     val parent get() = when (this) {
         AddLanguage -> Languages
+        PickLayout -> Languages
         Language, Styles -> Dictation
         Layout -> Keyboard
         Policy, Licences -> Privacy
@@ -102,6 +105,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
     val activeLanguage = remember(revision) { typing.activeLanguage }
     val allFutoLanguages = remember { FutoLanguages.all(context) }
     var languageQuery by remember { mutableStateOf("") }
+    var pickingLayoutTag by rememberSaveable { mutableStateOf("") }
     val style = remember(revision) { speech.style }
     val translate = remember(revision) { speech.translation }
     val clean = remember(revision) { speech.clean }
@@ -170,6 +174,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                         if (page == Page.Home) Spacer(Modifier.width(10.dp))
                         Label(when {
                             page == Page.Licence -> licence
+                            page == Page.PickLayout -> FutoLanguages.find(context, pickingLayoutTag)?.nativeName ?: stringResource(page.title)
                             page == Page.Feedback && Feedback.phase is Feedback.Phase.Sent -> stringResource(R.string.feedback_thanks_title)
                             else -> stringResource(page.title)
                         }, size = 26, weight = FontWeight.SemiBold,
@@ -269,7 +274,19 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                         }
                     }
                     Page.Languages -> {
-                        val addedItems = enabledLanguages.mapNotNull { tag -> FutoLanguages.find(context, tag) }
+                        data class AddedLangEntry(val raw: String, val normalized: String, val lang: FutoLanguage, val layoutId: String, val layoutName: String)
+                        val addedItems = enabledLanguages.mapNotNull { raw ->
+                            val (tag, lid) = TypingPreferences.parseEntry(raw)
+                            val lang = FutoLanguages.find(context, tag) ?: return@mapNotNull null
+                            val resolvedLid = lid ?: lang.defaultLayout
+                            AddedLangEntry(
+                                raw = raw,
+                                normalized = TypingPreferences.formatEntry(lang.localeTag, resolvedLid),
+                                lang = lang,
+                                layoutId = resolvedLid,
+                                layoutName = FutoLayouts.nameOf(context, resolvedLid)
+                            )
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Label(stringResource(R.string.languages_active_section), muted = true, size = 14,
                                 mod = Modifier.padding(start = 16.dp))
@@ -283,17 +300,15 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                                         speech.language = null
                                     }
                                 )
-                                addedItems.forEach { lang ->
+                                addedItems.forEach { item ->
                                     Rule()
+                                    val isSelected = activeLanguage == item.raw || activeLanguage == item.normalized
                                     Entry(
-                                        title = lang.nativeName,
-                                        note = buildString {
-                                            if (lang.englishName != lang.nativeName) append(lang.englishName, " · ")
-                                            append(stringResource(R.string.languages_layout_tag, lang.defaultLayoutLabel))
-                                        },
-                                        value = if (activeLanguage == lang.localeTag) "✓" else "",
+                                        title = "${item.lang.nativeName} (${item.layoutName})",
+                                        note = item.lang.englishName.takeIf { it != item.lang.nativeName },
+                                        value = if (isSelected) "✓" else "",
                                         action = {
-                                            typing.activeLanguage = lang.localeTag
+                                            typing.activeLanguage = item.normalized
                                             speech.language = null
                                         }
                                     )
@@ -305,29 +320,29 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                                 Label(stringResource(R.string.languages_enabled_section), muted = true, size = 14,
                                     mod = Modifier.padding(start = 16.dp))
                                 Card {
-                                    addedItems.forEachIndexed { idx, lang ->
+                                    addedItems.forEachIndexed { idx, item ->
                                         if (idx != 0) Rule()
                                         Row(
                                             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Column(Modifier.weight(1f).clickable(role = Role.Button) {
-                                                typing.activeLanguage = lang.localeTag
-                                                speech.language = null
+                                                pickingLayoutTag = item.lang.localeTag
+                                                open(Page.PickLayout)
                                             }) {
-                                                Label(lang.nativeName, weight = FontWeight.Medium)
+                                                Label("${item.lang.nativeName} (${item.layoutName})", weight = FontWeight.Medium)
                                                 Label(
                                                     text = buildString {
-                                                        if (lang.englishName != lang.nativeName) append(lang.englishName, " · ")
-                                                        append(stringResource(R.string.languages_layout_tag, lang.defaultLayoutLabel))
+                                                        if (item.lang.englishName != item.lang.nativeName) append(item.lang.englishName, " · ")
+                                                        append(stringResource(R.string.languages_choose_layout))
                                                     },
                                                     size = 13,
                                                     muted = true
                                                 )
                                             }
                                             Action(stringResource(R.string.languages_remove)) {
-                                                typing.removeLanguage(lang.localeTag)
+                                                typing.removeLanguage(item.raw)
                                             }
                                         }
                                     }
@@ -364,22 +379,53 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                             FutoLanguages.normalizeForSearch(lang.englishName).contains(q) ||
                                 FutoLanguages.normalizeForSearch(lang.nativeName).contains(q) ||
                                 lang.localeTag.lowercase().contains(q) ||
-                                FutoLanguages.normalizeForSearch(lang.defaultLayoutLabel).contains(q)
+                                lang.layouts.any { FutoLanguages.normalizeForSearch(FutoLayouts.nameOf(context, it)).contains(q) }
                         }
                         Card {
                             filtered.forEachIndexed { idx, lang ->
                                 if (idx != 0) Rule()
-                                val alreadyAdded = lang.localeTag in enabledLanguages
+                                val hasAnyAdded = enabledLanguages.any { TypingPreferences.parseEntry(it).first == lang.localeTag }
                                 Entry(
                                     title = lang.nativeName,
                                     note = buildString {
                                         if (lang.englishName != lang.nativeName) append(lang.englishName, " · ")
-                                        append(stringResource(R.string.languages_layout_tag, lang.defaultLayoutLabel))
+                                        val count = lang.layouts.size
+                                        append(if (count == 1) FutoLayouts.nameOf(context, lang.defaultLayout) else "$count layouts")
                                     },
-                                    value = if (alreadyAdded) "✓" else "+",
+                                    value = if (hasAnyAdded) "✓  ›" else "›",
                                     action = {
-                                        typing.addLanguage(lang.localeTag)
-                                        typing.activeLanguage = lang.localeTag
+                                        pickingLayoutTag = lang.localeTag
+                                        open(Page.PickLayout)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Page.PickLayout -> {
+                        val lang = FutoLanguages.find(context, pickingLayoutTag)
+                        val layoutIds = lang?.layouts ?: listOf("qwerty")
+                        if (lang != null && lang.englishName != lang.nativeName) {
+                            Label(lang.englishName, muted = true, size = 14, mod = Modifier.padding(start = 4.dp))
+                        }
+                        Card {
+                            layoutIds.forEachIndexed { idx, lid ->
+                                if (idx != 0) Rule()
+                                val resolved = remember(lid, pickingLayoutTag) {
+                                    FutoLayouts.resolve(context, lid, pickingLayoutTag)
+                                }
+                                val layoutName = resolved?.name ?: FutoLayouts.nameOf(context, lid)
+                                val previewRow = resolved?.rows?.firstOrNull { it.type == "letters" }
+                                    ?.keys?.filter { it.kind == "key" }
+                                    ?.joinToString(" ") { it.label }
+                                val entry = TypingPreferences.formatEntry(pickingLayoutTag, lid)
+                                val isActive = activeLanguage == entry
+                                Entry(
+                                    title = layoutName,
+                                    note = previewRow,
+                                    value = if (isActive) "✓" else "",
+                                    action = {
+                                        typing.addLanguageLayout(pickingLayoutTag, lid)
+                                        typing.activeLanguage = entry
                                         speech.language = null
                                         open(Page.Languages)
                                     }

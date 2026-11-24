@@ -56,6 +56,16 @@ class HexKeyboard : InputMethodService() {
     /** The keys' typing model, or none when the layout is only English's stand-in for a language
      * without one: English keys and accents, but no English next words or autocorrections for its text. */
     internal val typingLanguage get() = if (feedback.activeLanguage != null) feedback.layout?.layoutCode else typingLayout(feedback.layout, preferences.spoken)?.layoutCode
+    internal val activeFutoLocale: String?
+        get() = feedback.activeLocaleTag
+    internal val resolvedFutoLayout: FutoLayoutDef?
+        get() {
+            val tag = feedback.activeLocaleTag ?: return null
+            val layoutId = feedback.activeLayoutId
+                ?: ly.anoma.hex.speech.FutoLanguages.find(this, tag)?.defaultLayout
+                ?: return null
+            return FutoLayouts.resolve(this, layoutId, tag)
+        }
     // Android's personal dictionary is read off the main thread, and again whenever it changes.
     private val words = Executors.newSingleThreadExecutor { Thread(it, "Hex personal words") }
     private val dictionaryChanged = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -65,13 +75,19 @@ class HexKeyboard : InputMethodService() {
         KeyboardEngine(InputConnectionTarget(this), feedback, { layoutLanguage }, { typingLanguage },
             { SpatialDecoder(TypingModel.asset(assets, it)) },
             readPersonal = { PersonalWords.read(contentResolver, it) }, background = words,
-            emoji = EmojiWords(assets, words))
+            emoji = EmojiWords(assets, words),
+            futoLayout = { resolvedFutoLayout },
+            futoLocale = { activeFutoLocale })
     }
     private val typingChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == TypingPreferences.SUGGEST_SWEAR_WORDS) engine.swearWordsChanged()
         if (key == TypingPreferences.NUMBER_ROW) engine.numberRowChanged()
         if (key == TypingPreferences.EMOJI_SUGGESTIONS) engine.emojiSuggestionsChanged()
         if (key == TypingPreferences.KEYBOARD_TOOLS) { engine.keyboardToolsChanged(); watchClipboard() }
+        if (key == TypingPreferences.ACTIVE_LANGUAGE) {
+            engine.configureTyping(keepWord = false)
+            view?.status(capture.phase, idleHint())
+        }
     }
     // The strip's Paste tool comes and goes with the clipboard (Labs › Keyboard › Keyboard tools): the
     // listener exists only while the lab is on and the input view is shown.

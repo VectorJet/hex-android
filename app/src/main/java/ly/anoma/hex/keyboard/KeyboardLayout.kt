@@ -44,6 +44,8 @@ internal data class KeyboardPage(
     val pad: Pad? = null,
     /** Labs › Keyboard › Number row: the letter pages draw 1 to 0 above their letters too. */
     val numberRow: Boolean = false,
+    val futoLayout: FutoLayoutDef? = null,
+    val futoLocale: String? = null,
 ) {
     val lines: List<String> get() {
         val code = language.layoutCode
@@ -55,7 +57,15 @@ internal data class KeyboardPage(
     }
 
     /** The ten digits above the letter rows while the number row shows; ?123 and the pads keep their own. */
-    val digits: String? get() = if (numberRow && !symbols && pad == null) KeyboardLetters.DIGITS else null
+    val digits: String? get() {
+        if (symbols || pad != null) return null
+        val custom = futoLayout
+        if (custom != null) {
+            if (custom.hasExplicitNumberRow || custom.numberRowMode == "AlwaysDisabled") return null
+            if (custom.numberRowMode == "AlwaysEnabled") return KeyboardLetters.DIGITS
+        }
+        return if (numberRow) KeyboardLetters.DIGITS else null
+    }
 
     /** Row 1's digit corner hint, or none while the number row already shows the digit. */
     fun hint(row: Int, index: Int): Char? = if (digits != null) null else KeyboardLetters.digit(row, index)
