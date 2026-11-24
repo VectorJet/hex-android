@@ -65,12 +65,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val gap = KeyboardMetrics.GAP * density
     /** The menu's height is the keys' height for the page, the number row included, so opening it
      * never resizes the keyboard. */
-    /** Screen-proportional row pitch matching Gboard's height scaling (879 px total on 1080x2400 for 5-row layouts). */
+    /** Screen-proportional row pitch matching Gboard's exact 139 px pitch (109 px keycap + 30 px gap) on 1080x2400. */
     private fun effectiveRowPitch(custom: FutoLayoutDef?): Int {
         if (!landscape && custom != null && custom.rows.size >= 5) {
             val screenH = resources.displayMetrics.heightPixels
-            val targetFiveRowAreaPx = (screenH * 0.289f).roundToInt()
-            return maxOf(px(50f), targetFiveRowAreaPx / custom.rows.size)
+            return maxOf(px(48f), (screenH * 0.0579f).roundToInt())
         }
         return rowHeight
     }
@@ -399,11 +398,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             ?: page.language.layoutCode
         val isPcQwerty = layout.id == "pcqwerty"
         val pitch = effectiveRowPitch(layout)
-        val capH = if (!landscape && layout.rows.size >= 5) (pitch * 0.79f).roundToInt() else keyHeight
+        val capH = if (!landscape && layout.rows.size >= 5) (pitch * 0.784f).roundToInt() else keyHeight
         val rTop = (pitch - capH) / 2
         val rBottom = pitch - capH - rTop
-        val rowGap = if (isPcQwerty) 5.2f * density else gap
-        val rowSide = if (isPcQwerty) 8.5f * density else side
+        val rowGap = if (isPcQwerty) 4.95f * density else gap
+        val rowSide = if (isPcQwerty) 8.1f * density else side
 
         val numRows = layout.rows.filter { it.type == "numbers" }
         val letterRows = layout.rows.filter { it.type == "letters" }
@@ -553,14 +552,14 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                 val sym = caps.cap(
                     context.getString(R.string.keyboard_numbers_label),
                     context.getString(R.string.keyboard_numbers),
-                    modifier, 16f, ime.engine::mode
+                    modifier, 15.5f, ime.engine::mode
                 ).also { it.textEntry = false }
-                bRow.add(sym, 0f, 1.65f)
+                bRow.add(sym, 0f, 1.68f)
 
                 val sp = makeCustomSpaceCap()
-                bRow.add(sp, 3.2f, 6.4f)
+                bRow.add(sp, 3.22f, 6.56f)
 
-                val ent = caps.cap("", context.getString(R.string.keyboard_return), modifier, 16f, ime.engine::enter)
+                val ent = caps.cap("", context.getString(R.string.keyboard_return), modifier, 15.5f, ime.engine::enter)
                 ent.sound = AudioManager.FX_KEYPRESS_RETURN
                 ent.textEntry = false
                 typesOnLift(ent, preview = { null }, holds = { emptyList() }, type = { ent.performClick() })
@@ -576,7 +575,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                     ent.face.addView(ico, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
                     ent.contentDescription = actionLabel(page.enter.action) ?: context.getString(R.string.keyboard_return)
                 }
-                bRow.add(ent, 11.15f, 1.85f)
+                bRow.add(ent, 11.12f, 1.88f)
                 refreshSpace()
                 return
             }
@@ -724,7 +723,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         val fontSize = when {
             initialLabel.length >= 3 -> 15f
             initialLabel.length == 2 -> 19f
-            dense -> 21.5f
+            dense -> 19.2f
             else -> 25f
         }
         var touch: KeyPoint? = null
@@ -1280,7 +1279,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         spaceKey.longClickLabel = context.getString(R.string.keyboard_space_language_action,
             if (next.translate) context.getString(R.string.keyboard_space_translate, baseLabel) else baseLabel)
         val text = if (next.translate) context.getString(R.string.keyboard_space_translate, baseLabel) else baseLabel
-        val size = if (next.translate) 12f else 13.5f
+        val size = if (next.translate) 12f else 13f
         spaceKey.label?.text = text
         spaceKey.label?.textSize = size
         customSpaceLabel?.text = text

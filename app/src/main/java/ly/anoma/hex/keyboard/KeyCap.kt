@@ -112,7 +112,10 @@ internal class KeyCaps(private val context: Context, private val haptics: () -> 
     val modifier = context.getColor(R.color.modifier)
 
     /** Letters are Gboard's size (19.4 dp capitals); labels such as ?123 are smaller. */
-    fun cap(s: String, desc: String, fill: Int = key, sp: Float = 26f, weight: Int = if (sp >= 20f) 400 else 500, click: () -> Unit): KeyCap {
+    fun cap(s: String, desc: String, fill: Int = key, sp: Float = 26f, click: () -> Unit): KeyCap =
+        cap(s, desc, fill, sp, if (sp >= 20f) 400 else 500, click)
+
+    fun cap(s: String, desc: String, fill: Int, sp: Float, weight: Int, click: () -> Unit): KeyCap {
         val c = KeyCap(context, fill, desc, haptics, click)
         c.label = TextView(context).apply {
             text = s; textSize = sp; useInter(weight)
