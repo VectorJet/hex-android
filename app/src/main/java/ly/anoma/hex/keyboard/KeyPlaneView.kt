@@ -65,8 +65,13 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val gap = KeyboardMetrics.GAP * density
     /** The menu's height is the keys' height for the page, the number row included, so opening it
      * never resizes the keyboard. */
+    /** Screen-proportional row pitch matching Gboard's height scaling (879 px total on 1080x2400 for 5-row layouts). */
     private fun effectiveRowPitch(custom: FutoLayoutDef?): Int {
-        if (!landscape && custom != null && custom.rows.size >= 5) return px(48f)
+        if (!landscape && custom != null && custom.rows.size >= 5) {
+            val screenH = resources.displayMetrics.heightPixels
+            val targetFiveRowAreaPx = (screenH * 0.289f).roundToInt()
+            return maxOf(px(50f), targetFiveRowAreaPx / custom.rows.size)
+        }
         return rowHeight
     }
     val menuHeight: Int get() {
@@ -394,7 +399,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             ?: page.language.layoutCode
         val isPcQwerty = layout.id == "pcqwerty"
         val pitch = effectiveRowPitch(layout)
-        val capH = if (!landscape && layout.rows.size >= 5) px(37.5f) else keyHeight
+        val capH = if (!landscape && layout.rows.size >= 5) (pitch * 0.79f).roundToInt() else keyHeight
         val rTop = (pitch - capH) / 2
         val rBottom = pitch - capH - rTop
         val rowGap = if (isPcQwerty) 5.2f * density else gap
