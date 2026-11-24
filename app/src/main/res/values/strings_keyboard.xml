@@ -1,7 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <!-- The keyboard's own strings, apart from the app's so each can change without the other. Translated into
          Simplified Chinese (values-zh-rCN); see strings.xml for the other languages. -->
-    <string name="keyboard_hint_hold">Hold Hex to talk</string>
+    <string name="keyboard_hint_hold"></string>
     <string name="keyboard_hint_password">Dictation off in password fields</string>
     <string name="keyboard_hint_microphone">Allow the microphone in Hex</string>
     <!-- Dictation's notes, the same sentences MicCapture sends (HexKeyboard.speechNote). -->

@@ -56,7 +56,8 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
     private val measurePaint = TextPaint()
     private val dividers = List(2) { View(context) }
     private var offered = arrayOfNulls<String>(3)
-    private val menuKey = TextView(context)
+    private val menuKey = FrameLayout(context)
+    private val menuIcon = ImageView(context)
     // The tools in the hint's place while the strip has nothing else to show (Labs › Keyboard ›
     // Keyboard tools): emoji, paste, Hex's Keyboard settings and undo of the last autocorrection.
     private val toolsRow = LinearLayout(context)
@@ -110,9 +111,22 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
         setPadding(0, 0, 0, (stripHeight - 2 * centre).coerceAtLeast(0))
         clipChildren = false
 
+        menuKey.apply {
+            isFocusable = true
+            contentDescription = context.getString(R.string.keyboard_menu)
+            addView(View(context).apply {
+                isDuplicateParentStateEnabled = true
+                background = pressable(android.graphics.Color.TRANSPARENT)
+            }, LayoutParams(pill, pill, Gravity.CENTER))
+            menuIcon.setImageResource(R.drawable.ic_menu)
+            menuIcon.imageTintList = ColorStateList.valueOf(ink)
+            addView(menuIcon, LayoutParams(dp(20), dp(20), Gravity.CENTER))
+            setOnClickListener { if (choosing) host.backInMenu() else host.openMenu() }
+        }
+        idleRow.addView(menuKey, LinearLayout.LayoutParams(hexWidth, -1))
         statusText.apply {
             useInter(500); setTextColor(quiet); textSize = 14f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), 0, dp(4), 0)
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(6), 0, dp(4), 0)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             setOnClickListener { if (choosing) host.backInMenu() }
         }
@@ -168,12 +182,7 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
             visibility = GONE
         }
         idleRow.addView(undoBox, LinearLayout.LayoutParams(0, -1, 1f))
-        menuKey.apply {
-            useInter(550); gravity = Gravity.CENTER; textSize = 14f; setTextColor(ink)
-            setOnClickListener { if (choosing) host.closeMenu() else host.openMenu() }
-            setPadding(dp(8), 0, dp(8), 0); isFocusable = true; minimumWidth = dp(40)
-        }
-        idleRow.addView(menuKey, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, -1))
+
         addView(idleRow, LayoutParams(-1, -1).apply { marginStart = side; marginEnd = side + hexWidth })
 
         well.background = shape(color(R.color.sheet), pill / 2f)
@@ -327,12 +336,12 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
         toolPaste.visibility = if (StripTool.Paste in tools) VISIBLE else GONE
         toolUndo.visibility = if (StripTool.Undo in tools) VISIBLE else GONE
         statusText.visibility = if (idle && !show && (!undo || spoken) && !noted && tools.isEmpty()) VISIBLE else GONE
-        menuKey.text = context.getString(when { choosing -> R.string.keyboard_menu_done; show || shared -> R.string.keyboard_menu_more; else -> R.string.keyboard_menu_open })
+        menuIcon.setImageResource(if (choosing) R.drawable.ic_back else R.drawable.ic_menu)
         menuKey.contentDescription = context.getString(if (choosing) R.string.keyboard_menu_done else R.string.keyboard_menu)
     }
     /** The menu opened: the hint line shows its page's title and goes back a page when tapped. */
     fun menuOpened() { statusText.isClickable = true }
-    fun menuClosed() { statusText.isClickable = false; menuKey.text = context.getString(R.string.keyboard_menu_open); statusText.text = hint }
+    fun menuClosed() { statusText.isClickable = false; menuIcon.setImageResource(R.drawable.ic_menu); menuKey.contentDescription = context.getString(R.string.keyboard_menu); statusText.text = hint }
     fun title(text: String) { statusText.text = text }
 
     /** Shows [phase]'s strip; [note] says [hint] is a dictation's note. The caller has already closed the menu if
@@ -343,7 +352,7 @@ internal class StripView(context: Context, private val ime: HexKeyboard, private
         val wasIdle = idleRow.visibility == VISIBLE
         idle = phase == SpeechPhase.Idle
         val processing = phase == SpeechPhase.Transcribing
-        if (!menuVisible) { statusText.isClickable = false; menuKey.text = context.getString(R.string.keyboard_menu_open); statusText.text = hint }
+        if (!menuVisible) { statusText.isClickable = false; menuIcon.setImageResource(R.drawable.ic_menu); menuKey.contentDescription = context.getString(R.string.keyboard_menu); statusText.text = hint }
         if (idle != wasIdle) showIdle(idle)
         spinner.visibility = if (processing) VISIBLE else GONE
         check.visibility = if (!idle && !processing) VISIBLE else GONE
