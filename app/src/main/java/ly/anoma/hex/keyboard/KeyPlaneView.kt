@@ -394,10 +394,11 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             ?: page.language.layoutCode
         val isPcQwerty = layout.id == "pcqwerty"
         val pitch = effectiveRowPitch(layout)
-        val capH = if (!landscape && layout.rows.size >= 5) px(39.5f) else keyHeight
+        val capH = if (!landscape && layout.rows.size >= 5) px(37.5f) else keyHeight
         val rTop = (pitch - capH) / 2
         val rBottom = pitch - capH - rTop
-        val rowGap = if (isPcQwerty) 3.8f * density else gap
+        val rowGap = if (isPcQwerty) 5.2f * density else gap
+        val rowSide = if (isPcQwerty) 8.5f * density else side
 
         val numRows = layout.rows.filter { it.type == "numbers" }
         val letterRows = layout.rows.filter { it.type == "letters" }
@@ -424,7 +425,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         for ((nIdx, nRow) in numRows.withIndex()) {
             val top = if (nIdx == 0) reach else 0
             val cols = nRow.keys.size.toFloat().coerceAtLeast(1f)
-            val row = KeyRowLayout(context, cols, side, rowGap, rTop + top, rBottom)
+            val row = KeyRowLayout(context, cols, rowSide, rowGap, rTop + top, rBottom)
             rows.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, pitch + top))
             var at = 0f
             for (spec in nRow.keys) {
@@ -453,7 +454,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                 maxOf(1.5f, (cols - rowKeyUnits) / 2f)
             } else 0f
 
-            val row = KeyRowLayout(context, cols, side, rowGap, rTop + top, rBottom)
+            val row = KeyRowLayout(context, cols, rowSide, rowGap, rTop + top, rBottom)
             rows.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, pitch + top))
 
             // On PC QWERTY row 2 (a..'), indent 0.5u on the left so 'a' staggers between 'q' and 'w' like Gboard.
@@ -541,7 +542,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             if (isPcQwerty) {
                 // Match Gboard PC bottom-row proportions (compact ?123 left, centered Gboard-width spacebar, wide Enter right)
                 val totalCols = 13f
-                val bRow = KeyRowLayout(context, totalCols, side, rowGap, rTop, rBottom + bottomExtra)
+                val bRow = KeyRowLayout(context, totalCols, rowSide, rowGap, rTop, rBottom + bottomExtra)
                 rows.addView(bRow, LayoutParams(LayoutParams.MATCH_PARENT, bRowHeight))
 
                 val sym = caps.cap(
@@ -586,7 +587,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             val totalCols = maxOf(10f, fixedUnits + 3.5f * spaceCount)
             val spaceWidth = (totalCols - fixedUnits) / spaceCount
 
-            val bRow = KeyRowLayout(context, totalCols, side, rowGap, rTop, rBottom + bottomExtra)
+            val bRow = KeyRowLayout(context, totalCols, rowSide, rowGap, rTop, rBottom + bottomExtra)
             rows.addView(bRow, LayoutParams(LayoutParams.MATCH_PARENT, bRowHeight))
             var at = 0f
             for (spec in bKeys) {
