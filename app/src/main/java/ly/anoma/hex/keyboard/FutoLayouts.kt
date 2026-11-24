@@ -16,6 +16,7 @@ internal data class FutoKeySpec(
     val shiftedOutput: String? = null,
     val shiftedMoreKeys: List<String> = emptyList(),
     val hint: String? = null,
+    val noBg: Boolean = false,
 ) {
     fun displayLabel(shifted: Boolean, locale: Locale): String {
         if (!shifted) return label
@@ -240,6 +241,7 @@ internal object FutoLayouts {
                             shiftedOutput = kObj.optString("shiftedOutput", "").takeIf { it.isNotEmpty() },
                             shiftedMoreKeys = kObj.optJSONArray("shiftedMoreKeys").toStringList(),
                             hint = kObj.optString("hint", "").takeIf { it.isNotEmpty() },
+                            noBg = kObj.optBoolean("noBg", false),
                         )
                     )
                 }

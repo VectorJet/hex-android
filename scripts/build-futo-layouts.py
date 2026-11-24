@@ -5,7 +5,6 @@ compact JSON assets (`futo_layouts.json` and `futo_texts.json`) for Hex Android.
 import glob
 import json
 import os
-import re
 import yaml
 
 
@@ -27,13 +26,53 @@ META_DIRECTIVES = (
 )
 
 
+def unescape_aosp(s: str) -> str:
+    """Unescapes AOSP keyspec backslash escapes (e.g. \\\\ -> \\, \\| -> |, \\' -> ')."""
+    out = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            out.append(s[i + 1])
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
+def split_unescaped_pipe(s: str) -> tuple[str, str] | None:
+    """Splits on the first unescaped '|' if present."""
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            i += 2
+            continue
+        if s[i] == "|":
+            return s[:i], s[i + 1 :]
+        i += 1
+    return None
+
+
 def parse_spec(raw: str) -> dict:
     s = str(raw)
-    if s in ("$",):
+    if s == "$":
         return {"kind": "key", "label": "$", "output": "$"}
     if s.startswith("$"):
         token = s[1:]
-        if token in ("shift", "delete", "space", "enter", "symbols", "alphabet", "number", "contextual", "action", "optionalzwnj", "zwnj", "gap"):
+        if token in (
+            "shift",
+            "delete",
+            "space",
+            "enter",
+            "symbols",
+            "alphabet",
+            "number",
+            "contextual",
+            "action",
+            "optionalzwnj",
+            "zwnj",
+            "gap",
+        ):
             return {"kind": token}
         if token == "currency1":
             return {"kind": "key", "label": "£", "output": "£"}
@@ -45,8 +84,10 @@ def parse_spec(raw: str) -> dict:
             return {"kind": "key", "label": "¥", "output": "¥"}
         if token.startswith("alt"):
             return {"kind": "symbols"}
-    if "|" in s:
-        left, right = s.split("|", 1)
+
+    split = split_unescaped_pipe(s)
+    if split is not None:
+        left, right = split
         if right.startswith("!code/"):
             if right == "!code/key_switch_alpha_symbol":
                 return {"kind": "symbols"}
@@ -71,14 +112,22 @@ def parse_spec(raw: str) -> dict:
             elif icon_name == "zwj_key":
                 label = "ZWJ"
             else:
-                label = right
+                label = unescape_aosp(right)
         elif label.startswith("!string/"):
             str_name = label.removeprefix("!string/")
-            label = {"label_pause_key": "Pause", "label_wait_key": "Wait"}.get(str_name, right)
-        return {"kind": "key", "label": label, "output": right}
+            label = {"label_pause_key": "Pause", "label_wait_key": "Wait"}.get(
+                str_name, unescape_aosp(right)
+            )
+        else:
+            label = unescape_aosp(label)
+        return {"kind": "key", "label": label, "output": unescape_aosp(right)}
+
     if s.startswith("!icon/") or s.startswith("!code/"):
         return {"kind": "ignore"}
-    return {"kind": "key", "label": s, "output": s}
+    if s.startswith("!text/"):
+        return {"kind": "key", "label": s, "output": s}
+    val = unescape_aosp(s)
+    return {"kind": "key", "label": val, "output": val}
 
 
 def clean_more_keys(items) -> list[str]:
@@ -95,13 +144,16 @@ def clean_more_keys(items) -> list[str]:
             continue
         if s.startswith("!code/"):
             continue
-        if "|" in s:
-            left, right = s.split("|", 1)
+        split = split_unescaped_pipe(s)
+        if split is not None:
+            left, right = split
             if right.startswith("!code/"):
                 continue
+            out.append(f"{unescape_aosp(left)}|{unescape_aosp(right)}")
+        elif s.startswith("!text/"):
             out.append(s)
         else:
-            out.append(s)
+            out.append(unescape_aosp(s))
     return out
 
 
@@ -172,7 +224,6 @@ def parse_key_node(node, inherited_shiftable: bool = True) -> dict | None:
                         dirs.append(dn["output"])
                 base["moreKeys"] = base.get("moreKeys", []) + dirs
             return base
-        # base key
         spec = node.get("spec")
         if spec is None:
             return None
@@ -224,7 +275,6 @@ def compile_layouts(repo_root: str) -> None:
     out_dir = os.path.join(repo_root, "app/src/main/assets/layouts")
     os.makedirs(out_dir, exist_ok=True)
 
-    # 1. Compile locale text tables (!text/keyspec_* and !text/morekeys_*)
     texts = {}
     for path in sorted(glob.glob(os.path.join(locales_dir, "*.json"))):
         code = os.path.splitext(os.path.basename(path))[0]
@@ -232,10 +282,14 @@ def compile_layouts(repo_root: str) -> None:
         table = {}
         for k, v in raw.get("keyspec", {}).items():
             if isinstance(v, str) and v:
-                table[f"keyspec_{k}"] = v
+                table[f"keyspec_{k}"] = unescape_aosp(v) if not v.startswith("!") else v
         for k, v in raw.get("morekeys", {}).items():
             if isinstance(v, list):
-                cleaned = [x for x in v if isinstance(x, str) and x != "%" and not any(x.startswith(d) for d in META_DIRECTIVES)]
+                cleaned = [
+                    unescape_aosp(x) if not x.startswith("!") else x
+                    for x in v
+                    if isinstance(x, str) and x != "%" and not any(x.startswith(d) for d in META_DIRECTIVES)
+                ]
                 if cleaned:
                     table[f"morekeys_{k}"] = cleaned
         for k, v in raw.get("other", {}).items():
@@ -249,7 +303,6 @@ def compile_layouts(repo_root: str) -> None:
     with open(os.path.join(out_dir, "futo_texts.json"), "w", encoding="utf-8") as f:
         json.dump(texts, f, ensure_ascii=False, separators=(",", ":"))
 
-    # 2. Compile all layout YAMLs
     layouts = {}
     for path in sorted(glob.glob(os.path.join(layouts_dir, "**/*.yaml"), recursive=True)):
         base = os.path.basename(path)

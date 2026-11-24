@@ -80,18 +80,18 @@ internal data class KeyboardPage(
 internal object KeyboardMetrics {
     const val SIDE = 1.9f
     const val GAP = 5.33f
-    const val STRIP = 44.25f
+    const val STRIP = 37f
     /** Row 1's touch targets reach this far above its cell, into the strip (Gboard's reach about 2 dp). */
     const val ROW1_REACH = 2f
     /** Where the strip's words and the Hex mark centre, from its top (Gboard's mic: 21.7 dp). */
-    const val STRIP_CENTER = 21.7f
+    const val STRIP_CENTER = 18.5f
     const val ROW = 58.9f
     const val KEY_HEIGHT = 47f
     /** Under row 4's cell, above the system's bar: with half a row gap it is Gboard's 12.2 dp. */
     const val BOTTOM = 6.25f
     // Turned, Gboard's rows are 43 dp apart with 39 dp keycaps (it goes full screen; Hex doesn't).
-    const val STRIP_LANDSCAPE = 38f
-    const val STRIP_CENTER_LANDSCAPE = 19f
+    const val STRIP_LANDSCAPE = 34f
+    const val STRIP_CENTER_LANDSCAPE = 17f
     const val ROW_LANDSCAPE = 43f
     const val KEY_HEIGHT_LANDSCAPE = 39f
     const val BOTTOM_LANDSCAPE = 2f
