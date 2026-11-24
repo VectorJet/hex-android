@@ -89,6 +89,10 @@ class HexKeyboard : InputMethodService() {
             view?.status(capture.phase, idleHint())
         }
     }
+    private val customizeChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        engine.configureTyping(keepWord = true)
+        view?.status(capture.phase, idleHint())
+    }
     // The strip's Paste tool comes and goes with the clipboard (Labs › Keyboard › Keyboard tools): the
     // listener exists only while the lab is on and the input view is shown.
     private val clipboard by lazy { getSystemService(ClipboardManager::class.java) }
@@ -108,6 +112,7 @@ class HexKeyboard : InputMethodService() {
         setTheme(R.style.HexIme)
         super.onCreate()
         getSharedPreferences("typing", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(typingChanged)
+        getSharedPreferences(CustomizePrefs.PREFS_NAME, MODE_PRIVATE).registerOnSharedPreferenceChangeListener(customizeChanged)
         contentResolver.registerContentObserver(UserDictionary.Words.CONTENT_URI, true, dictionaryChanged)
         capture = MicCapture(LocalSpeech(applicationContext),
             update = { phase, note -> view?.status(phase, speechNote(note) ?: idleHint(), note != null) },
@@ -211,6 +216,7 @@ class HexKeyboard : InputMethodService() {
     }
     override fun onDestroy() {
         getSharedPreferences("typing", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(typingChanged)
+        getSharedPreferences(CustomizePrefs.PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(customizeChanged)
         contentResolver.unregisterContentObserver(dictionaryChanged); words.shutdownNow()
         viewing = false; watchClipboard()
         view?.cancelGestures(); view = null; engine.surface = null; capture.close(); super.onDestroy()

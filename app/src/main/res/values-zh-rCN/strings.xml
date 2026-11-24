@@ -54,6 +54,16 @@
     <string name="home_run_setup">重新运行设置</string>
 
     <string name="settings_languages">语言和布局</string>
+    <string name="settings_customize">自定义</string>
+    <string name="customize_keyboard_section">调整键盘大小</string>
+    <string name="customize_height">键盘高度（%1$d%%）</string>
+    <string name="customize_width">键盘宽度（%1$d%%）</string>
+    <string name="customize_font_section">调整字体大小</string>
+    <string name="customize_font_scale">按键字体大小（%1$d%%）</string>
+    <string name="customize_buttons_section">调整按键大小</string>
+    <string name="customize_button_width">按键宽度（%1$d%%）</string>
+    <string name="customize_button_height">按键高度（%1$d%%）</string>
+    <string name="customize_reset">恢复默认</string>
     <string name="settings_add_language">添加语言</string>
     <string name="settings_pick_layout">选择布局</string>
     <string name="languages_choose_layout">更改布局</string>

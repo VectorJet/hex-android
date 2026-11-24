@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ly.anoma.hex.feedback.Feedback
 import ly.anoma.hex.feedback.FeedbackForm
+import ly.anoma.hex.keyboard.CustomizePrefs
 import ly.anoma.hex.keyboard.FutoLayouts
 import ly.anoma.hex.speech.*
 import ly.anoma.hex.typing.TypingPreferences
@@ -49,7 +50,7 @@ import ly.anoma.hex.updates.Updates
 
 private enum class Page(val title: Int) {
     Home(R.string.app_name), Languages(R.string.settings_languages), AddLanguage(R.string.settings_add_language),
-    PickLayout(R.string.settings_pick_layout),
+    PickLayout(R.string.settings_pick_layout), Customize(R.string.settings_customize),
     Dictation(R.string.settings_dictation), Keyboard(R.string.settings_keyboard), Privacy(R.string.settings_privacy),
     Labs(R.string.settings_labs),
     Language(R.string.settings_dictation_language), Layout(R.string.settings_keyboard_layout), Styles(R.string.settings_style),
@@ -93,7 +94,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
     // Observe them even while trying the keyboard inside this page.
     var revision by remember { mutableIntStateOf(0) }
     DisposableEffect(context) {
-        val stores = listOf("speech", "typing").map { context.getSharedPreferences(it, Context.MODE_PRIVATE) }
+        val stores = listOf("speech", "typing", CustomizePrefs.PREFS_NAME).map { context.getSharedPreferences(it, Context.MODE_PRIVATE) }
         val changed = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> revision++ }
         stores.forEach { it.registerOnSharedPreferenceChangeListener(changed) }
         onDispose { stores.forEach { it.unregisterOnSharedPreferenceChangeListener(changed) } }
@@ -106,6 +107,12 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
     val allFutoLanguages = remember { FutoLanguages.all(context) }
     var languageQuery by remember { mutableStateOf("") }
     var pickingLayoutTag by rememberSaveable { mutableStateOf("") }
+    val customize = remember { CustomizePrefs(context) }
+    val heightScale = remember(revision) { customize.keyboardHeightScale }
+    val widthScale = remember(revision) { customize.keyboardWidthScale }
+    val fontScale = remember(revision) { customize.fontScale }
+    val buttonWidthScale = remember(revision) { customize.buttonWidthScale }
+    val buttonHeightScale = remember(revision) { customize.buttonHeightScale }
     val style = remember(revision) { speech.style }
     val translate = remember(revision) { speech.translation }
     val clean = remember(revision) { speech.clean }
@@ -225,7 +232,7 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                         if (notice != null) Label(notice, muted = true, size = 14, lines = 3)
                         Updates.HomeCard()
                         Card {
-                            listOf(Page.Languages, Page.Dictation, Page.Keyboard, Page.Privacy, Page.Labs).forEachIndexed { i, dest ->
+                            listOf(Page.Languages, Page.Customize, Page.Dictation, Page.Keyboard, Page.Privacy, Page.Labs).forEachIndexed { i, dest ->
                                 if (i != 0) Rule()
                                 Entry(stringResource(dest.title), action = { open(dest) })
                             }
@@ -515,6 +522,78 @@ internal fun HexSettings(setup: Setup, speech: SpeechPreferences, typing: Typing
                                 Toggle(stringResource(R.string.keyboard_tools), stringResource(R.string.keyboard_tools_detail),
                                     keyboardTools) { typing.keyboardTools = it }
                             }
+                        }
+                    }
+                    Page.Customize -> {
+                        val ink = colorResource(R.color.ink)
+                        val ruleCol = colorResource(R.color.rule)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Label(stringResource(R.string.customize_keyboard_section), muted = true, size = 14,
+                                mod = Modifier.padding(start = 16.dp))
+                            Card {
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Label(stringResource(R.string.customize_height, (heightScale * 100f).toInt()), weight = FontWeight.Medium)
+                                    Slider(
+                                        value = heightScale,
+                                        onValueChange = { customize.keyboardHeightScale = it },
+                                        valueRange = 0.75f..1.35f,
+                                        colors = SliderDefaults.colors(thumbColor = ink, activeTrackColor = ink, inactiveTrackColor = ruleCol)
+                                    )
+                                }
+                                Rule()
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Label(stringResource(R.string.customize_width, (widthScale * 100f).toInt()), weight = FontWeight.Medium)
+                                    Slider(
+                                        value = widthScale,
+                                        onValueChange = { customize.keyboardWidthScale = it },
+                                        valueRange = 0.80f..1.05f,
+                                        colors = SliderDefaults.colors(thumbColor = ink, activeTrackColor = ink, inactiveTrackColor = ruleCol)
+                                    )
+                                }
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Label(stringResource(R.string.customize_font_section), muted = true, size = 14,
+                                mod = Modifier.padding(start = 16.dp))
+                            Card {
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Label(stringResource(R.string.customize_font_scale, (fontScale * 100f).toInt()), weight = FontWeight.Medium)
+                                    Slider(
+                                        value = fontScale,
+                                        onValueChange = { customize.fontScale = it },
+                                        valueRange = 0.75f..1.45f,
+                                        colors = SliderDefaults.colors(thumbColor = ink, activeTrackColor = ink, inactiveTrackColor = ruleCol)
+                                    )
+                                }
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Label(stringResource(R.string.customize_buttons_section), muted = true, size = 14,
+                                mod = Modifier.padding(start = 16.dp))
+                            Card {
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Label(stringResource(R.string.customize_button_width, (buttonWidthScale * 100f).toInt()), weight = FontWeight.Medium)
+                                    Slider(
+                                        value = buttonWidthScale,
+                                        onValueChange = { customize.buttonWidthScale = it },
+                                        valueRange = 0.70f..1.30f,
+                                        colors = SliderDefaults.colors(thumbColor = ink, activeTrackColor = ink, inactiveTrackColor = ruleCol)
+                                    )
+                                }
+                                Rule()
+                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Label(stringResource(R.string.customize_button_height, (buttonHeightScale * 100f).toInt()), weight = FontWeight.Medium)
+                                    Slider(
+                                        value = buttonHeightScale,
+                                        onValueChange = { customize.buttonHeightScale = it },
+                                        valueRange = 0.70f..1.25f,
+                                        colors = SliderDefaults.colors(thumbColor = ink, activeTrackColor = ink, inactiveTrackColor = ruleCol)
+                                    )
+                                }
+                            }
+                        }
+                        Card {
+                            Entry(stringResource(R.string.customize_reset), action = { customize.resetAll() })
                         }
                     }
                     Page.Styles -> Card {

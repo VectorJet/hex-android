@@ -62,6 +62,16 @@
 
     <!-- Settings -->
     <string name="settings_languages">Languages &amp; layouts</string>
+    <string name="settings_customize">Customize</string>
+    <string name="customize_keyboard_section">Resize keyboard</string>
+    <string name="customize_height">Keyboard height (%1$d%%)</string>
+    <string name="customize_width">Keyboard width (%1$d%%)</string>
+    <string name="customize_font_section">Resize font</string>
+    <string name="customize_font_scale">Key font size (%1$d%%)</string>
+    <string name="customize_buttons_section">Resize buttons</string>
+    <string name="customize_button_width">Button width (%1$d%%)</string>
+    <string name="customize_button_height">Button height (%1$d%%)</string>
+    <string name="customize_reset">Reset defaults</string>
     <string name="settings_add_language">Add language</string>
     <string name="settings_pick_layout">Choose layout</string>
     <string name="languages_choose_layout">Change layout</string>

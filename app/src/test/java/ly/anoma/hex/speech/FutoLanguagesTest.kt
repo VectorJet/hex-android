@@ -1,6 +1,7 @@
 package ly.anoma.hex.speech
 
 import java.io.File
+import ly.anoma.hex.keyboard.CustomizePrefs
 import ly.anoma.hex.keyboard.FutoLayouts
 import ly.anoma.hex.typing.TypingPreferences
 import org.junit.Assert.assertEquals
@@ -29,5 +30,6 @@ class FutoLanguagesTest {
         assertEquals("en_US:qwertz", TypingPreferences.formatEntry("en_US", "qwertz"))
         assertEquals("en_US" to "qwertz", TypingPreferences.parseEntry("en_US:qwertz"))
         assertEquals("hi" to null, TypingPreferences.parseEntry("hi"))
+        assertEquals("customize", CustomizePrefs.PREFS_NAME)
     }
 }

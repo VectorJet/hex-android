@@ -65,13 +65,26 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private val gap = KeyboardMetrics.GAP * density
     /** The menu's height is the keys' height for the page, the number row included, so opening it
      * never resizes the keyboard. */
-    /** Screen-proportional row pitch matching Gboard's exact 139 px pitch (109 px keycap + 30 px gap) on 1080x2400. */
     private fun effectiveRowPitch(custom: FutoLayoutDef?): Int {
-        if (!landscape && custom != null && custom.rows.size >= 5) {
+        val base = if (!landscape && custom != null && custom.rows.size >= 5) {
             val screenH = resources.displayMetrics.heightPixels
-            return maxOf(px(48f), (screenH * 0.0579f).roundToInt())
+            maxOf(px(48f), (screenH * 0.0579f).roundToInt())
+        } else {
+            rowHeight
         }
-        return rowHeight
+        return (base * customize.keyboardHeightScale).roundToInt().coerceAtLeast(px(28f))
+    }
+
+    private fun effectiveSideMargin(baseSide: Float): Float {
+        val wScale = customize.keyboardWidthScale
+        if (wScale >= 1.0f) {
+            // 1.00..1.05 widens usable key span by reducing outer side margin smoothly
+            val extraInset = ((1.05f - wScale) * 24f * density)
+            return maxOf(1.5f * density, baseSide + extraInset - 3f * density)
+        }
+        val screenW = resources.displayMetrics.widthPixels.toFloat()
+        val extraSide = screenW * (1.0f - wScale) * 0.5f
+        return baseSide + extraSide
     }
     val menuHeight: Int get() {
         val custom = current?.takeIf { !it.symbols && it.pad == null }?.futoLayout
@@ -125,6 +138,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
     private var customSpaceLabel: TextView? = null
     private var activeLocale: Locale = Locale.ROOT
     private var shiftIcon: ImageView? = null
+    private val customize = CustomizePrefs(context)
     // The Labs letter-symbol setting the keys were drawn with, so a change draws them when next shown.
     private var letterSymbolsDrawn = false
     private val switchLanguage = Runnable {
@@ -398,11 +412,13 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
             ?: page.language.layoutCode
         val isPcQwerty = layout.id == "pcqwerty"
         val pitch = effectiveRowPitch(layout)
-        val capH = if (!landscape && layout.rows.size >= 5) (pitch * 0.784f).roundToInt() else keyHeight
+        val rawCapH = if (!landscape && layout.rows.size >= 5) (pitch * 0.784f).roundToInt() else keyHeight
+        val capH = (rawCapH * customize.buttonHeightScale).roundToInt().coerceIn(dp(22), pitch - dp(2))
         val rTop = (pitch - capH) / 2
         val rBottom = pitch - capH - rTop
         val rowGap = if (isPcQwerty) 4.95f * density else gap
-        val rowSide = if (isPcQwerty) 8.1f * density else side
+        val rowSide = effectiveSideMargin(if (isPcQwerty) 8.1f * density else side)
+        val btnWidthScale = customize.buttonWidthScale
 
         val numRows = layout.rows.filter { it.type == "numbers" }
         val letterRows = layout.rows.filter { it.type == "letters" }
@@ -511,7 +527,9 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                             KeyboardLetters.DIGITS[charPosition]
                         } else null
                         val cap = buildFutoCharKey(spec, langCode, digit, letterHolds, row, modifierBg = false, dense = cols >= 12f)
-                        row.add(cap, at, keyWidth)
+                        val wSpan = keyWidth * btnWidthScale
+                        val wOffset = (keyWidth - wSpan) * 0.5f
+                        row.add(cap, at + wOffset, wSpan)
                         at += keyWidth
                         charPosition++
                     }
@@ -720,12 +738,13 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         val shifted = current?.shifted == true
         val initialLabel = spec.displayLabel(shifted, activeLocale)
         val singleChar = spec.output.singleOrNull()?.lowercaseChar()
-        val fontSize = when {
+        val baseSp = when {
             initialLabel.length >= 3 -> 15f
             initialLabel.length == 2 -> 19f
             dense -> 19.2f
             else -> 25f
         }
+        val fontSize = (baseSp * customize.fontScale).coerceIn(10f, 38f)
         var touch: KeyPoint? = null
         var downOutput: String? = null
         val fill = when {
@@ -1279,7 +1298,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
         spaceKey.longClickLabel = context.getString(R.string.keyboard_space_language_action,
             if (next.translate) context.getString(R.string.keyboard_space_translate, baseLabel) else baseLabel)
         val text = if (next.translate) context.getString(R.string.keyboard_space_translate, baseLabel) else baseLabel
-        val size = if (next.translate) 12f else 13f
+        val size = ((if (next.translate) 12f else 13f) * customize.fontScale).coerceIn(9f, 24f)
         spaceKey.label?.text = text
         spaceKey.label?.textSize = size
         customSpaceLabel?.text = text
