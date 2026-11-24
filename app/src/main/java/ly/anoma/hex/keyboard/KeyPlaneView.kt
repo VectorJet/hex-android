@@ -548,7 +548,7 @@ internal class KeyPlaneView(context: Context, private val ime: HexKeyboard, priv
                         bRow.add(k, at, 1.5f); at += 1.5f
                     }
                     "action" -> {
-                        val k = caps.icon(R.drawable.ic_emoji, context.getString(R.string.keyboard_emoji), caps.key) { host.openEmoji() }
+                        val k = caps.icon(R.drawable.ic_emoji, context.getString(R.string.keyboard_emoji), caps.key, { host.openEmoji() })
                         k.textEntry = false
                         typesOnLift(k, preview = { null }, holds = { emptyList() }, type = { k.performClick() })
                         bRow.add(k, at, 1f); at += 1f
