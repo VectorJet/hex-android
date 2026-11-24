@@ -110,7 +110,7 @@ internal object Feedback {
             "screen" to screen,
             "channel" to if (BuildConfig.BUILD_TYPE == "preview") "preview" else "play",
             "speech_model" to if (ModelStore.installed(context) != null) "whisper-small-q5_1" else "whisper-tiny-q5_1",
-            "dictation_language" to SpeechPreferences(context).spoken.code)
+            "dictation_language" to SpeechPreferences(context).spokenCode)
         if (BuildConfig.DEBUG) metadata["build_type"] = BuildConfig.BUILD_TYPE
         return FeedbackContext(info.versionName.orEmpty(), info.longVersionCode.toString(), "Android ${Build.VERSION.RELEASE}",
             model, context.resources.configuration.locales[0].toLanguageTag(), metadata)

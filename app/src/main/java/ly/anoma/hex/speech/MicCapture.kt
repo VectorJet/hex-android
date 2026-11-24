@@ -177,7 +177,7 @@ internal class MicCapture(
             try {
                 if (ticket.cancelled) return@execute
                 val options = ticket.options
-                val raw = recognizer.decode(pcm, count, options.spoken.code, options.translate,
+                val raw = recognizer.decode(pcm, count, options.languageCode, options.translate,
                     options.vocabulary.takeIf { it.isNotEmpty() }?.joinToString(", "), ticket.job)
                 if (ticket.cancelled) return@execute
                 when (val text = raw?.let { SpokenText.format(it, options) }) {

@@ -52,10 +52,10 @@ class HexKeyboard : InputMethodService() {
     internal var nextEnglish: Boolean? = null
     /** The options the dictation in flight started with: its language decides mid-sentence case. */
     internal val feedback by lazy { TypingPreferences(this) }
-    internal val layoutLanguage get() = feedback.layout ?: preferences.spoken.layout ?: Spoken.English
-    /** The keys' typing model, or none when the layout is only English's stand-in for a dictation language
+    internal val layoutLanguage get() = feedback.layout ?: (if (feedback.activeLanguage == null) preferences.spoken.layout else null) ?: Spoken.English
+    /** The keys' typing model, or none when the layout is only English's stand-in for a language
      * without one: English keys and accents, but no English next words or autocorrections for its text. */
-    internal val typingLanguage get() = typingLayout(feedback.layout, preferences.spoken)?.layoutCode
+    internal val typingLanguage get() = if (feedback.activeLanguage != null) feedback.layout?.layoutCode else typingLayout(feedback.layout, preferences.spoken)?.layoutCode
     // Android's personal dictionary is read off the main thread, and again whenever it changes.
     private val words = Executors.newSingleThreadExecutor { Thread(it, "Hex personal words") }
     private val dictionaryChanged = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -178,7 +178,7 @@ class HexKeyboard : InputMethodService() {
         // fields, such as Settings' practice box, never get the signature.
         val own = currentInputEditorInfo?.packageName == packageName
         val signed = if (own) null else Signature.append(text, preferences.signatureText, preferences.signature)
-        engine.insertDictation(signed ?: text, if (options.translate) "en" else options.spoken.code, signed != null)
+        engine.insertDictation(signed ?: text, if (options.translate) "en" else options.languageCode, signed != null)
     }
     private fun leaveEditor() {
         viewing = false; watchClipboard()

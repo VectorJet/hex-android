@@ -86,6 +86,9 @@ Java_ly_anoma_hex_speech_Whisper_decode(JNIEnv *env, jobject, jlong handle, jboo
     if (!code) return nullptr;
     std::string lang(code);
     env->ReleaseStringUTFChars(language, code);
+    if (!lang.empty() && lang != "auto" && whisper_lang_id(lang.c_str()) < 0) {
+        lang = whisper_is_multilingual(ctx) ? "auto" : "en";
+    }
     params.language = lang.c_str();
     params.translate = translate;
     // Custom vocabulary as Whisper's initial prompt biases its spelling of those names.

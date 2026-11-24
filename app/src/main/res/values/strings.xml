@@ -61,6 +61,15 @@
     <string name="home_run_setup">Run setup again</string>
 
     <!-- Settings -->
+    <string name="settings_languages">Languages &amp; layouts</string>
+    <string name="settings_add_language">Add language</string>
+    <string name="languages_active_section">Active language</string>
+    <string name="languages_enabled_section">Added languages</string>
+    <string name="languages_add_action">Add language</string>
+    <string name="languages_search_hint">Search languages…</string>
+    <string name="languages_remove">Remove</string>
+    <string name="languages_automatic_detail">Follows the phone’s language</string>
+    <string name="languages_layout_tag">Layout: %1$s</string>
     <string name="settings_dictation">Dictation</string>
     <string name="settings_keyboard">Keyboard</string>
     <string name="settings_privacy">Privacy</string>

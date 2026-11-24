@@ -8,6 +8,7 @@ import android.widget.TextView
 import ly.anoma.hex.R
 import ly.anoma.hex.label
 import ly.anoma.hex.speech.DictationLanguage
+import ly.anoma.hex.speech.FutoLanguages
 import ly.anoma.hex.speech.Style
 import ly.anoma.hex.useInter
 import kotlin.math.roundToInt
@@ -43,8 +44,11 @@ internal class SpeechMenu(context: Context, private val ime: HexKeyboard,
         when (next) {
             Page.Home -> {
                 row(s(R.string.keyboard_menu_style), more(s(prefs.style.label))) { show(Page.Style) }
-                row(s(R.string.keyboard_menu_language), more(prefs.language?.label ?: s(R.string.keyboard_menu_automatic))) { show(Page.Language) }
-                if (prefs.translation && prefs.spoken == DictationLanguage.Spanish)
+                val currentLangLabel = prefs.language?.label
+                    ?: ime.feedback.activeLanguage?.let { FutoLanguages.find(context, it)?.nativeName }
+                    ?: s(R.string.keyboard_menu_automatic)
+                row(s(R.string.keyboard_menu_language), more(currentLangLabel)) { show(Page.Language) }
+                if (prefs.translation && prefs.spokenCode == "es")
                     row(s(R.string.keyboard_menu_next_dictation),
                         more(s(if (ime.nextEnglish != false) R.string.keyboard_paste_english else R.string.keyboard_paste_spoken))) {
                         show(Page.NextDictation)
@@ -65,9 +69,24 @@ internal class SpeechMenu(context: Context, private val ime: HexKeyboard,
             Page.Style -> Style.entries.forEach { value -> row(s(value.label), if (prefs.style == value) chosen else "") {
                 prefs.style = value; home()
             } }
-            Page.Language -> (listOf(null) + DictationLanguage.entries).forEach { value ->
-                row(value?.label ?: s(R.string.keyboard_menu_automatic), if (prefs.language == value) chosen else "") {
-                    prefs.language = value; ime.nextEnglish = null; close()
+            Page.Language -> {
+                val activeTag = ime.feedback.activeLanguage
+                val enabled = ime.feedback.enabledLanguages.mapNotNull { FutoLanguages.find(context, it) }
+                val autoChosen = prefs.language == null && activeTag == null
+                row(s(R.string.keyboard_menu_automatic), if (autoChosen) chosen else "") {
+                    prefs.language = null; ime.feedback.activeLanguage = null; ime.nextEnglish = null; close()
+                }
+                enabled.forEach { lang ->
+                    val isSelected = prefs.language == null && activeTag == lang.localeTag
+                    row(lang.nativeName, if (isSelected) chosen else "") {
+                        prefs.language = null; ime.feedback.activeLanguage = lang.localeTag; ime.nextEnglish = null; close()
+                    }
+                }
+                val coveredCodes = enabled.map { it.whisperCode }.toSet()
+                DictationLanguage.entries.filter { it.code !in coveredCodes }.forEach { value ->
+                    row(value.label, if (prefs.language == value) chosen else "") {
+                        prefs.language = value; ime.nextEnglish = null; close()
+                    }
                 }
             }
             Page.NextDictation -> listOf(true, false).forEach { english ->

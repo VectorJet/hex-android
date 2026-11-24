@@ -53,6 +53,15 @@
     <string name="home_keyboard_settings">键盘设置</string>
     <string name="home_run_setup">重新运行设置</string>
 
+    <string name="settings_languages">语言和布局</string>
+    <string name="settings_add_language">添加语言</string>
+    <string name="languages_active_section">当前语言</string>
+    <string name="languages_enabled_section">已添加语言</string>
+    <string name="languages_add_action">添加语言</string>
+    <string name="languages_search_hint">搜索语言…</string>
+    <string name="languages_remove">移除</string>
+    <string name="languages_automatic_detail">跟随系统语言</string>
+    <string name="languages_layout_tag">布局：%1$s</string>
     <string name="settings_dictation">听写</string>
     <string name="settings_keyboard">键盘</string>
     <string name="settings_privacy">隐私</string>

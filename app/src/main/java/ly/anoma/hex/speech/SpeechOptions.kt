@@ -13,9 +13,12 @@ internal enum class Spoken(val code: String, val label: String) {
     // Whisper calls Bokmål "no"; the keyboard and its model use BCP 47 "nb".
     val layoutCode get() = if (this == Norwegian) "nb" else code
     companion object {
-        fun matching(code: String?): Spoken? = when (code) {
-            "no", "nb", "nn" -> Norwegian
-            else -> entries.firstOrNull { it.code == code }
+        fun matching(code: String?): Spoken? {
+            val base = code?.replace('-', '_')?.substringBefore('_')?.lowercase()
+            return when (base) {
+                "no", "nb", "nn" -> Norwegian
+                else -> entries.firstOrNull { it.code == base }
+            }
         }
     }
 }
@@ -33,9 +36,12 @@ internal enum class DictationLanguage(val code: String, val label: String, val l
     Polish("pl", "Polski", null), Russian("ru", "Русский", null);
 
     companion object {
-        fun matching(code: String?): DictationLanguage? = when (code) {
-            "no", "nb", "nn" -> Norwegian
-            else -> entries.firstOrNull { it.code == code }
+        fun matching(code: String?): DictationLanguage? {
+            val base = code?.replace('-', '_')?.substringBefore('_')?.lowercase()
+            return when (base) {
+                "no", "nb", "nn" -> Norwegian
+                else -> entries.firstOrNull { it.code == base }
+            }
         }
         /** Automatic: the keyboard's layout when one is chosen there, as iPhone dictation follows the
          * keyboard's language, else the first of the phone's languages Hex dictates, else English. */
@@ -45,16 +51,26 @@ internal enum class DictationLanguage(val code: String, val label: String, val l
     }
 }
 
-/** The layout whose typing model the keyboard reads: the one pinned in Keyboard › Keyboard layout, else the
+/** The layout whose typing model the keyboard reads: the one pinned in Languages & layouts, else the
  * dictation language's own. Null when the keys are only English's stand-in for a language with no layout
- * (Português, Nederlands, Polski, Русский): English's next words and autocorrections are not that language's. */
+ * (Português, Nederlands, Polski, Русский, or a FUTO language without an HXTM model). */
 internal fun typingLayout(pinned: Spoken?, spoken: DictationLanguage): Spoken? = pinned ?: spoken.layout
 
-internal data class SpeechOptions(val style: Style, val spoken: DictationLanguage, val clean: Boolean, val translate: Boolean,
-                                   val lowercase: Boolean = false, val endWithPeriod: Boolean = true,
-                                   val formatLists: Boolean = false, val spokenPunctuation: Boolean = false,
-                                   val vocabulary: List<String> = emptyList())
-internal class SpeechPreferences(context: Context) {
+internal data class SpeechOptions(
+    val style: Style,
+    val spoken: DictationLanguage,
+    val clean: Boolean,
+    val translate: Boolean,
+    val lowercase: Boolean = false,
+    val endWithPeriod: Boolean = true,
+    val formatLists: Boolean = false,
+    val spokenPunctuation: Boolean = false,
+    val vocabulary: List<String> = emptyList(),
+    val languageCode: String = spoken.code,
+    val languageLabel: String = spoken.label,
+)
+
+internal class SpeechPreferences(private val context: Context) {
     private val prefs = context.getSharedPreferences("speech", Context.MODE_PRIVATE)
     var style: Style
         get() = Style.entries.firstOrNull { it.name == prefs.getString("style", null) } ?: Style.Polished
@@ -63,12 +79,21 @@ internal class SpeechPreferences(context: Context) {
     var language: DictationLanguage?
         get() = DictationLanguage.matching(prefs.getString("spoken", null))
         set(value) { prefs.edit().putString("spoken", value?.code).apply() }
-    // Keyboard › Keyboard layout when chosen there (null while the layout follows dictation).
     private val typing = context.getSharedPreferences("typing", Context.MODE_PRIVATE)
+    private val activeFutoLanguage: FutoLanguage?
+        get() = typing.getString("activeLanguage", null)?.let { FutoLanguages.find(context, it) }
     val spoken: DictationLanguage
-        get() = language ?: Resources.getSystem().configuration.locales.let { locales ->
-            DictationLanguage.automatic(Spoken.matching(typing.getString("layout", null)), (0 until locales.size()).map { locales[it].language })
-        }
+        get() = language ?: activeFutoLanguage?.let { DictationLanguage.matching(it.localeTag) }
+            ?: Resources.getSystem().configuration.locales.let { locales ->
+                DictationLanguage.automatic(
+                    Spoken.matching(typing.getString("activeLanguage", null) ?: typing.getString("layout", null)),
+                    (0 until locales.size()).map { locales[it].language }
+                )
+            }
+    val spokenCode: String
+        get() = language?.code ?: activeFutoLanguage?.whisperCode ?: spoken.code
+    val spokenLabel: String
+        get() = language?.label ?: activeFutoLanguage?.nativeName ?: spoken.label
     var clean: Boolean
         get() = prefs.getBoolean("clean", false)
         set(value) { prefs.edit().putBoolean("clean", value).apply() }
@@ -106,7 +131,21 @@ internal class SpeechPreferences(context: Context) {
         get() = prefs.getString("signatureText", Signature.DEFAULT_TEXT)
             ?.takeIf { Signature.textProblem(it) == null }?.trim() ?: Signature.DEFAULT_TEXT
         set(value) { prefs.edit().putString("signatureText", value).apply() }
-    fun options(nextEnglish: Boolean?) = SpeechOptions(style, spoken, clean,
-        translation && spoken == DictationLanguage.Spanish && (nextEnglish ?: true), lowercase, endWithPeriod, formatLists, spokenPunctuation,
-        if (customVocabulary) vocabularyTerms else emptyList())
+    fun options(nextEnglish: Boolean?): SpeechOptions {
+        val code = spokenCode
+        val label = spokenLabel
+        return SpeechOptions(
+            style = style,
+            spoken = spoken,
+            clean = clean,
+            translate = translation && code == "es" && (nextEnglish ?: true),
+            lowercase = lowercase,
+            endWithPeriod = endWithPeriod,
+            formatLists = formatLists,
+            spokenPunctuation = spokenPunctuation,
+            vocabulary = if (customVocabulary) vocabularyTerms else emptyList(),
+            languageCode = code,
+            languageLabel = label,
+        )
+    }
 }

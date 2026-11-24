@@ -8,7 +8,7 @@ internal object SpokenText {
      * again (a style can capitalize "iPhone"), then Lowercase, the same wherever Hex dictates.
      * Translation already happened in Whisper, so a translated dictation is English. */
     fun format(raw: String, options: SpeechOptions): String {
-        val language = if (options.translate) "en" else options.spoken.code
+        val language = if (options.translate) "en" else options.languageCode
         val spelled = VocabularySpelling.apply(options.vocabulary, raw)
         if (options.style == Style.Verbatim || raw.isBlank()) return finished(style(spelled, options.style, language), options)
         val spoken = SpokenCleanup.counts(SpokenCleanup.symbols(spelled.trim(), language), language)
