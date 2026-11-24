@@ -78,7 +78,7 @@ internal data class KeyboardPage(
  * the nearest key, as Gboard's do. Widths are in cells: a tenth of the row for the bottom row and
  * 10-letter rows, an eleventh where a layout has 11 letters. */
 internal object KeyboardMetrics {
-    const val SIDE = 6.5f
+    const val SIDE = 10.67f
     const val GAP = 5.33f
     const val STRIP = 37f
     /** Row 1's touch targets reach this far above its cell, into the strip (Gboard's reach about 2 dp). */
@@ -95,7 +95,7 @@ internal object KeyboardMetrics {
     const val ROW_LANDSCAPE = 43f
     const val KEY_HEIGHT_LANDSCAPE = 39f
     const val BOTTOM_LANDSCAPE = 2f
-    const val CORNER = 7f
+    const val CORNER = 6.5f
     /** The Hex key's target at the strip's trailing end: its centre is where Gboard's mic is. */
     const val HEX_KEY = 42.7f
     /** The Hex key's circle when pressed or dictating, and the recording bar's height. */
